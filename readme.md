@@ -1,1 +1,6 @@
-Food Segmentation With Pre trained Model (GroundingDINO and MobileSAM)
+# Food Segmentation Using GroundingDINO and MobileSAM
+
+
+
+
+
