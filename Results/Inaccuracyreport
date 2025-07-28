@@ -1,6 +1,16 @@
-1. #Seg3 Image
+1. #Seg3.png
 -Model created correct bounding boxes around the image described in the prompt.
 -Segmentation task partially masked the sliced plantain.
 -Different prompts such as "A ripped plantain" only segmentated the plantain to the right. Lighting condition (shadow casted in the middle of the image) is to blame for this occurence.
 -Current prompt used for Seg3 is, "A sliced plantain" with class "plantain"
 -The model also included a strawberry image on the serving plate to its segmentation task, which makes seg3 inaccurate.
+
+
+2. #Seg5.png
+-GroundingDINO correctly created the bounding box around the mango.
+-Prompt used is "A sliced mango" with class "Mango".
+-MobileSAM partially segmentated the sliced mango. Holes are seen around the top left of the bounding box created by GorundingDINO.
+
+
+3. #Seg9.png
+-GroundingDINO did not create a bounding box around the third kenkey in the image. 
