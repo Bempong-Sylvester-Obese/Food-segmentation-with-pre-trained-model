@@ -1,0 +1,6 @@
+1. #Seg3 Image
+-Model created correct bounding boxes around the image described in the prompt.
+-Segmentation task partially masked the sliced plantain.
+-Different prompts such as "A ripped plantain" only segmentated the plantain to the right. Lighting condition (shadow casted in the middle of the image) is to blame for this occurence.
+-Current prompt used for Seg3 is, "A sliced plantain" with class "plantain"
+-The model also included a strawberry image on the serving plate to its segmentation task, which makes seg3 quite inaccurate.
