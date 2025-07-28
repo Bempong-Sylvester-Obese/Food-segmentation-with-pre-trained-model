@@ -16,3 +16,7 @@
 -GroundingDINO did not create a bounding box around the third kenkey in the image. 
 -MobileSAM ignored the third kenkey as a result of GroundingDINO not creating bounding box around it.
 -Bounding box around Tilapia and pepper stew were correct. However, segmentation on the pepper stew wasn't done properly.The Next task is to try different prompts to analyse different segmentation results on this particular image.
+
+
+# Seg11.png
+-GroundingDINO correctly identified the fried chicken and the jollof rice. However, it didn't identify the shito. The shito was stated in the prompt yet it didn't identify the shito. Will rephrase the prompt to include prepositions to describe the location of the shito.
