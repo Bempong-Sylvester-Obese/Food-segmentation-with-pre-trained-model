@@ -9,7 +9,7 @@
 2. #Seg5.png
 -GroundingDINO correctly created the bounding box around the mango.
 -Prompt used is "A sliced mango" with class "Mango".
--MobileSAM partially segmentated the sliced mango. Holes are seen around the top left of the bounding box created by GorundingDINO.
+-MobileSAM partially segmentated the sliced mango. Holes are seen around the top left of the bounding box created by GroundingDINO.
 
 
 3. #Seg9.png
