@@ -19,4 +19,4 @@
 
 
 # Seg11.png
--GroundingDINO correctly identified the fried chicken and the jollof rice. However, it didn't identify the shito. The shito was stated in the prompt yet it didn't identify the shito. Will rephrase the prompt to include prepositions to describe the location of the shito.
+-GroundingDINO correctly identified the fried chicken and the jollof rice. However, it didn't identify the shito. The shito was stated in the prompt yet it didn't identify the shito.I will rephrase the prompt to include prepositions to describe the location of the shito.
