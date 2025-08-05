@@ -27,7 +27,7 @@ if mobile_sam_dir not in sys.path:
 try:
     # Import directly from the local directory
     sys.path.insert(0, grounding_dino_dir)
-    from groundingdino.util.inference import Model as GroundingDINO
+    from groundingdino.util.inference import Model as GroundingDINO # ignore this error
     print("Successfully imported GroundingDINO")
 except ModuleNotFoundError as e:
     print(f"Error importing GroundingDINO model: {e}")
@@ -38,7 +38,7 @@ except ModuleNotFoundError as e:
         import sys
         import os
         sys.path.insert(0, os.path.join(grounding_dino_dir, 'groundingdino'))
-        from util.inference import Model as GroundingDINO
+        from util.inference import Model as GroundingDINO # ignore this error
         print("Successfully imported GroundingDINO using alternative method")
     except Exception as e2:
         print(f"Alternative import also failed: {e2}")
@@ -49,7 +49,7 @@ except ModuleNotFoundError as e:
 try:
     # Import directly from the local directory
     sys.path.insert(0, mobile_sam_dir)
-    from mobile_sam import sam_model_registry, SamPredictor
+    from mobile_sam import sam_model_registry, SamPredictor # ignore this error
     print("Successfully imported MobileSAM")
 except ModuleNotFoundError as e:
     print(f"Error importing MobileSAM: {e}")
@@ -103,13 +103,20 @@ except Exception as e:
 
 try:
     print("Loading MobileSAM model..")
+    print(f"Using SAM type: {SAM_TYPE}")
+    print(f"Checkpoint path: {MOBILE_SAM_CHECKPOINT_PATH}")
+    print(f"Checkpoint exists: {os.path.exists(MOBILE_SAM_CHECKPOINT_PATH)}")
+    
     sam = sam_model_registry[SAM_TYPE](checkpoint=MOBILE_SAM_CHECKPOINT_PATH)
     sam.to(DEVICE)
     sam_predictor = SamPredictor(sam)
     print("MobileSAM model loaded successfully")
+    print(f"Model device: {next(sam.parameters()).device}")
 except Exception as e:
     print(f"Error loading MobileSAM model: {e}")
     print("Continuing without MobileSAM model...")
+    import traceback
+    traceback.print_exc()
 
 print("\nModel loading completed")
 

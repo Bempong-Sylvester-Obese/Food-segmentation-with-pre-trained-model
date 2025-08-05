@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import uuid
 import os
+import traceback
 
 # Import the pre-loaded models from model_loader
 from model_loader import grounding_dino, sam_predictor, device
@@ -55,13 +56,23 @@ def run_segmentation(image_bytes: bytes, prompt: str):
 
         # Segment with MobileSAM
         sam_predictor.set_image(source_image)
+        
+        # Convert detections to the correct format for SAM
         input_boxes = torch.tensor(detections.xyxy, device=device)
+        
+        # Ensure boxes are in the correct format [x1, y1, x2, y2]
+        if input_boxes.dim() == 1:
+            input_boxes = input_boxes.unsqueeze(0)
+        
+        print(f"Input boxes shape: {input_boxes.shape}")
+        print(f"Input boxes: {input_boxes}")
 
         try:
-            masks, _, _ = sam_predictor.predict_torch(
+            # Use predict method instead of predict_torch for better compatibility
+            masks, scores, logits = sam_predictor.predict(
                 point_coords=None,
                 point_labels=None,
-                boxes=input_boxes,
+                box=input_boxes[0].cpu().numpy(),  # Use first box
                 multimask_output=False,
             )
             
@@ -70,14 +81,39 @@ def run_segmentation(image_bytes: bytes, prompt: str):
                 return None, None
                 
             # Create a binary mask
-            final_mask = masks[0].cpu().numpy().squeeze()
+            final_mask = masks[0]  # Use first mask
             binary_mask = (final_mask > 0).astype(np.uint8) * 255
             
             print(f"Successfully generated mask with shape: {binary_mask.shape}")
+            print(f"Mask values range: {final_mask.min()} to {final_mask.max()}")
             
         except Exception as e:
             print(f"Error in MobileSAM prediction: {str(e)}")
-            return None, None
+            # Try alternative approach with point prompts
+            try:
+                print("Trying alternative approach with point prompts...")
+                # Get center point of the bounding box
+                box = detections.xyxy[0]
+                center_x = int((box[0] + box[2]) / 2)
+                center_y = int((box[1] + box[3]) / 2)
+                
+                masks, scores, logits = sam_predictor.predict(
+                    point_coords=np.array([[center_x, center_y]]),
+                    point_labels=np.array([1]),  # 1 for foreground point
+                    multimask_output=False,
+                )
+                
+                if masks is not None and len(masks) > 0:
+                    final_mask = masks[0]
+                    binary_mask = (final_mask > 0).astype(np.uint8) * 255
+                    print(f"Successfully generated mask with point prompts, shape: {binary_mask.shape}")
+                else:
+                    print("No masks generated with point prompts")
+                    return None, None
+                    
+            except Exception as e2:
+                print(f"Error in alternative MobileSAM prediction: {str(e2)}")
+                return None, None
 
         # Create a copy of the original image for visualization
         result_image = source_image.copy()
@@ -378,8 +414,48 @@ def health_check():
         'models_loaded': {
             'grounding_dino': grounding_dino is not None,
             'sam_predictor': sam_predictor is not None
-        }
+        },
+        'device': str(device),
+        'sam_predictor_type': type(sam_predictor).__name__ if sam_predictor else None
     }
+
+@app.route('/test_sam')
+def test_sam():
+    """Test endpoint to verify SAM functionality"""
+    if sam_predictor is None:
+        return {'error': 'SAM predictor not loaded'}
+    
+    try:
+        # Create a simple test image
+        test_image = np.zeros((100, 100, 3), dtype=np.uint8)
+        test_image[25:75, 25:75] = [255, 255, 255]  # White square
+        
+        # Set the image
+        sam_predictor.set_image(test_image)
+        
+        # Try to predict with a simple box
+        test_box = np.array([30, 30, 70, 70])
+        
+        masks, scores, logits = sam_predictor.predict(
+            point_coords=None,
+            point_labels=None,
+            box=test_box,
+            multimask_output=False,
+        )
+        
+        return {
+            'success': True,
+            'masks_shape': masks.shape if masks is not None else None,
+            'scores': scores.tolist() if scores is not None else None,
+            'test_box': test_box.tolist()
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }
 
 @app.route('/segment', methods=['POST'])
 def segment():
