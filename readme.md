@@ -226,7 +226,7 @@ Please refer to their respective licenses for model usage terms.
 - GroundingDINO integration for object detection
 - MobileSAM integration for segmentation
 - Flask web application with user interface
-- Google Collab for experimentation
+- Google Colab for experimentation
 - Automatic model downloading
 - Error handling and validation
 - Health check endpoint
