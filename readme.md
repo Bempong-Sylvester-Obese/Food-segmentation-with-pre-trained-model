@@ -98,9 +98,10 @@ cd webapp
 python app.py
 ```
 
-2. Open your web browser and navigate to:
+2. Open your web browser and navigate to any of the local host domains available:
 ```
-http://localhost:5000
+ * http://127.0.0.1:5001
+ * http://192.168.0.181:5001
 ```
 
 3. Upload an image and enter a prompt describing the food item you want to segment (e.g., "the burger", "the pizza", "the apple")
