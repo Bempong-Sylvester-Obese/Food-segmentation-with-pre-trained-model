@@ -71,8 +71,8 @@ def run_segmentation(image_bytes: bytes, prompt: str):
 
         # Generate unique filenames to avoid conflicts
         unique_id = uuid.uuid4()
-        original_filename = f"static/images/{unique_id}_original.png"
-        result_filename = f"static/images/{unique_id}_result.png"
+        original_filename = f"static/Images/{unique_id}_original.png"
+        result_filename = f"static/Generated_Images/{unique_id}_result.png"
 
         # Ensure the directory exists
         os.makedirs("static/images", exist_ok=True)
