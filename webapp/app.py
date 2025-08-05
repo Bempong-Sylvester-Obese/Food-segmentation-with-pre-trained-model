@@ -64,10 +64,13 @@ def run_segmentation(image_bytes: bytes, prompt: str):
         # Apply the mask to the original image to get the segmented object
         segmented_image = cv2.bitwise_and(source_image, source_image, mask=binary_mask)
 
-        # Make the background transparent
-        b_channel, g_channel, r_channel = cv2.split(segmented_image)
-        alpha_channel = np.where(binary_mask == 255, 255, 0).astype(b_channel.dtype)
-        img_bgra = cv2.merge((b_channel, g_channel, r_channel, alpha_channel))
+        # Create a white background for better visibility
+        white_background = np.ones_like(source_image) * 255
+        # Apply the inverse mask to the white background
+        inverse_mask = cv2.bitwise_not(binary_mask)
+        background_with_mask = cv2.bitwise_and(white_background, white_background, mask=inverse_mask)
+        # Combine the segmented object with the white background
+        final_image = cv2.add(segmented_image, background_with_mask)
 
         # Generate unique filenames to avoid conflicts
         unique_id = uuid.uuid4()
@@ -79,7 +82,7 @@ def run_segmentation(image_bytes: bytes, prompt: str):
 
         # Save images
         cv2.imwrite(original_filename, source_image)
-        cv2.imwrite(result_filename, img_bgra)
+        cv2.imwrite(result_filename, final_image)
         
         # Verify files were created
         if not os.path.exists(original_filename) or not os.path.exists(result_filename):
