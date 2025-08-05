@@ -32,7 +32,18 @@ try:
 except ModuleNotFoundError as e:
     print(f"Error importing GroundingDINO model: {e}")
     print("Please ensure GroundingDINO is properly installed")
-    sys.exit("Could not import GroundingDINO model.")
+    print("Trying alternative import method...")
+    try:
+        # Try alternative import path
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(grounding_dino_dir, 'groundingdino'))
+        from util.inference import Model as GroundingDINO
+        print("Successfully imported GroundingDINO using alternative method")
+    except Exception as e2:
+        print(f"Alternative import also failed: {e2}")
+        print("Please ensure GroundingDINO is properly installed")
+        sys.exit("Could not import GroundingDINO model.")
 
 # Import MobileSAM with error handling
 try:

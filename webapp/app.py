@@ -335,7 +335,6 @@ def index():
 
 @app.route('/health')
 def health_check():
-    """Health check endpoint to verify the app is running."""
     return {
         'status': 'healthy',
         'models_loaded': {
@@ -346,7 +345,6 @@ def health_check():
 
 @app.route('/segment', methods=['POST'])
 def segment():
-    """Handles form submission and returns segmented image."""
     try:
         # Check if models are loaded
         if grounding_dino is None:
@@ -406,4 +404,4 @@ def serve_images(filename):
     return send_from_directory('static/images', filename)
 
 if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5001)

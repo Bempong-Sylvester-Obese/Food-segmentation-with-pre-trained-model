@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-Simple test script to verify the HTML template works correctly.
-This script tests the template rendering without requiring the ML models.
-"""
-
 from flask import Flask, render_template_string
 import os
 
@@ -247,12 +241,10 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def index():
-    """Test the template rendering."""
     return HTML_TEMPLATE
 
 @app.route('/segment', methods=['POST'])
 def segment():
-    """Mock segment endpoint for testing."""
     return {
         'success': False, 
         'error': 'This is a test endpoint. The actual segmentation requires the ML models to be loaded.'

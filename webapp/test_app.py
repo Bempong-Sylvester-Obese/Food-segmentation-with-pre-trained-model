@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-"""
-Test script to verify the food segmentation app functionality
-"""
-
 import os
 import sys
 import numpy as np
@@ -12,27 +7,24 @@ import cv2
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 def test_imports():
-    """Test if all required modules can be imported"""
     try:
         from model_loader import grounding_dino, sam_predictor, device
-        print("✓ Model imports successful")
+        print("Model imports successful")
         return True
     except Exception as e:
-        print(f"✗ Model imports failed: {e}")
+        print(f"Model imports failed: {e}")
         return False
 
 def test_flask_app():
-    """Test if Flask app can be created"""
     try:
         from app import app
-        print("✓ Flask app creation successful")
+        print("Flask app creation successful")
         return True
     except Exception as e:
-        print(f"✗ Flask app creation failed: {e}")
+        print(f"Flask app creation failed: {e}")
         return False
 
 def test_segmentation_function():
-    """Test the segmentation function with a dummy image"""
     try:
         from app import run_segmentation
         
@@ -44,14 +36,13 @@ def test_segmentation_function():
         # Test with a simple prompt
         original_path, result_path = run_segmentation(image_bytes, "the object")
         
-        print("✓ Segmentation function test completed")
+        print("Segmentation function test completed")
         return True
     except Exception as e:
-        print(f"✗ Segmentation function test failed: {e}")
+        print(f"Segmentation function test failed: {e}")
         return False
 
-def main():
-    """Run all tests"""
+def main(): # Run all tests 
     print("Testing Food Segmentation App...")
     print("=" * 40)
     
@@ -75,13 +66,13 @@ def main():
     print(f"Tests passed: {passed}/{total}")
     
     if passed == total:
-        print("✓ All tests passed! The app is ready to use.")
+        print("All tests passed! The app is ready to use.")
         print("\nTo run the app:")
         print("  cd webapp")
         print("  python app.py")
         print("  Then open http://localhost:5000 in your browser")
     else:
-        print("✗ Some tests failed. Please check the errors above.")
+        print("Some tests failed. Please check the errors above.")
         return 1
     
     return 0
