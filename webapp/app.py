@@ -61,16 +61,31 @@ def run_segmentation(image_bytes: bytes, prompt: str):
         final_mask = masks[0].cpu().numpy().squeeze()
         binary_mask = (final_mask > 0).astype(np.uint8) * 255
 
-        # Apply the mask to the original image to get the segmented object
-        segmented_image = cv2.bitwise_and(source_image, source_image, mask=binary_mask)
-
-        # Create a white background for better visibility
-        white_background = np.ones_like(source_image) * 255
-        # Apply the inverse mask to the white background
-        inverse_mask = cv2.bitwise_not(binary_mask)
-        background_with_mask = cv2.bitwise_and(white_background, white_background, mask=inverse_mask)
-        # Combine the segmented object with the white background
-        final_image = cv2.add(segmented_image, background_with_mask)
+        # Create a copy of the original image for visualization
+        result_image = source_image.copy()
+        
+        # Create a colored overlay for the segmentation mask
+        overlay = np.zeros_like(source_image)
+        overlay[binary_mask > 0] = [0, 255, 0]  # Green overlay for segmentation
+        
+        # Blend the overlay with the original image
+        alpha = 0.3  # Transparency factor
+        result_image = cv2.addWeighted(result_image, 1, overlay, alpha, 0)
+        
+        # Draw bounding boxes
+        for box in detections.xyxy:
+            x1, y1, x2, y2 = map(int, box)
+            # Draw rectangle with red color and thickness 2
+            cv2.rectangle(result_image, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            
+            # Add label with confidence score
+            label = f"{prompt}"
+            # Get text size
+            (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+            # Draw background rectangle for text
+            cv2.rectangle(result_image, (x1, y1 - text_height - 10), (x1 + text_width + 10, y1), (0, 0, 255), -1)
+            # Draw text
+            cv2.putText(result_image, label, (x1 + 5, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
         # Generate unique filenames to avoid conflicts
         unique_id = uuid.uuid4()
@@ -82,7 +97,7 @@ def run_segmentation(image_bytes: bytes, prompt: str):
 
         # Save images
         cv2.imwrite(original_filename, source_image)
-        cv2.imwrite(result_filename, final_image)
+        cv2.imwrite(result_filename, result_image)
         
         # Verify files were created
         if not os.path.exists(original_filename) or not os.path.exists(result_filename):
