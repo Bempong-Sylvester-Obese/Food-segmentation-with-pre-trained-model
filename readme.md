@@ -192,12 +192,5 @@ This project uses pre-trained models from:
 
 Please refer to their respective licenses for model usage terms.
 
-## 🙏 Acknowledgments
 
-- GroundingDINO team for the excellent object detection model
-- MobileSAM team for the lightweight segmentation model
-- The open-source community for various supporting libraries
-
----
-
-**Note**: This project is designed for educational and research purposes. The models are pre-trained and may not work perfectly on all types of food images. For production use, consider fine-tuning the models on your specific dataset.
+**Note**: This project is designed for experimental purposes. The models are pre-trained and may not work perfectly on all types of food images. For production use, consider fine-tuning the models on your specific dataset.
