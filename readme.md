@@ -108,7 +108,7 @@ python app.py
 
 4. Click "Segment Food" to process the image
 
-5. View the results showing both the original image and the segmented object with transparent background
+5. View the results showing both the original image and the segmented object
 
 ### Google Colab Notebook
 
@@ -164,13 +164,12 @@ The project includes comprehensive testing results:
 - **Sample Results**: Check `Results/accurateresults/` for successful segmentations
 - **Analysis**: Review `Results/inaccuracies/` for cases where segmentation failed
 - **Data**: Detailed results in `Results/result.json` (7,000+ lines of analysis data)
-- **Generated Images**: Processed images with transparent backgrounds in `webapp/static/GeneratedImages/`
+- **Generated Images**: Processed images in `webapp/static/GeneratedImages/`
 
 ### Performance Metrics
 - Successfully tested on 40+ food images
 - Supports various food types: burgers, pizza, fruits, vegetables, etc.
 - Real-time processing with automatic error handling
-- Transparent background generation for segmented objects
 
 ## 🔍 Troubleshooting
 
