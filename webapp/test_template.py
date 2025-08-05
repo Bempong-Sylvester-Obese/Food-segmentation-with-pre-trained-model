@@ -1,97 +1,16 @@
-from flask import Flask, request, render_template_string, send_from_directory
-import cv2
-import numpy as np
-import torch
-import uuid
+#!/usr/bin/env python3
+"""
+Simple test script to verify the HTML template works correctly.
+This script tests the template rendering without requiring the ML models.
+"""
+
+from flask import Flask, render_template_string
 import os
 
-# Import the pre-loaded models from model_loader
-from model_loader import grounding_dino, sam_predictor, device
-
-# Setup Flask App 
+# Create a minimal Flask app for testing
 app = Flask(__name__)
 
-# Create a directory to store uploaded and generated images
-os.makedirs("static/images", exist_ok=True)
-
-# Main Inference Function
-def run_segmentation(image_bytes: bytes, prompt: str):
-    try:
-        # Validate inputs
-        if not image_bytes:
-            raise ValueError("No image data provided")
-        
-        if not prompt or not prompt.strip():
-            raise ValueError("No prompt provided")
-        
-        # Convert image bytes to an OpenCV image
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        source_image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        if source_image is None:
-            raise ValueError("Invalid image format. Please upload a valid image file.")
-        
-        # Check image dimensions
-        height, width = source_image.shape[:2]
-        if height == 0 or width == 0:
-            raise ValueError("Invalid image dimensions")
-        
-        # Detect with GroundingDINO
-        detections, _ = grounding_dino.predict_with_caption(
-            image=source_image,
-            caption=prompt,
-            box_threshold=0.35,
-            text_threshold=0.25
-        )
-
-        if len(detections.xyxy) == 0:
-            return None, None # No object detected
-
-        # Segment with MobileSAM
-        sam_predictor.set_image(source_image)
-        input_boxes = torch.tensor(detections.xyxy, device=device)
-
-        masks, _, _ = sam_predictor.predict_torch(
-            point_coords=None,
-            point_labels=None,
-            boxes=input_boxes,
-            multimask_output=False,
-        )
-        # Create a binary mask
-        final_mask = masks[0].cpu().numpy().squeeze()
-        binary_mask = (final_mask > 0).astype(np.uint8) * 255
-
-        # Apply the mask to the original image to get the segmented object
-        segmented_image = cv2.bitwise_and(source_image, source_image, mask=binary_mask)
-
-        # Make the background transparent
-        b_channel, g_channel, r_channel = cv2.split(segmented_image)
-        alpha_channel = np.where(binary_mask == 255, 255, 0).astype(b_channel.dtype)
-        img_bgra = cv2.merge((b_channel, g_channel, r_channel, alpha_channel))
-
-        # Generate unique filenames to avoid conflicts
-        unique_id = uuid.uuid4()
-        original_filename = f"static/images/{unique_id}_original.png"
-        result_filename = f"static/images/{unique_id}_result.png"
-
-        # Ensure the directory exists
-        os.makedirs("static/images", exist_ok=True)
-
-        # Save images
-        cv2.imwrite(original_filename, source_image)
-        cv2.imwrite(result_filename, img_bgra)
-        
-        # Verify files were created
-        if not os.path.exists(original_filename) or not os.path.exists(result_filename):
-            raise ValueError("Failed to save processed images")
-
-        return original_filename, result_filename
-        
-    except Exception as e:
-        print(f"Error in run_segmentation: {str(e)}")
-        return None, None
-
-# HTML for the web interface
+# HTML template from app.py (simplified for testing)
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -326,84 +245,20 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# --- Web App Routes ---
-
 @app.route('/')
 def index():
-    """The main page with the upload form."""
+    """Test the template rendering."""
     return HTML_TEMPLATE
-
-@app.route('/health')
-def health_check():
-    """Health check endpoint to verify the app is running."""
-    return {
-        'status': 'healthy',
-        'models_loaded': {
-            'grounding_dino': grounding_dino is not None,
-            'sam_predictor': sam_predictor is not None
-        }
-    }
 
 @app.route('/segment', methods=['POST'])
 def segment():
-    """Handles form submission and returns segmented image."""
-    try:
-        # Check if models are loaded
-        if grounding_dino is None:
-            return {'success': False, 'error': 'GroundingDINO model is not loaded. Please check the server logs.'}
-        
-        if sam_predictor is None:
-            return {'success': False, 'error': 'MobileSAM model is not loaded. Please check the server logs.'}
-        
-        if 'image_file' not in request.files:
-            return {'success': False, 'error': 'No image file provided.'}
-        
-        image_file = request.files['image_file']
-        prompt = request.form.get('prompt', '').strip()
-        
-        if not image_file or image_file.filename == '':
-            return {'success': False, 'error': 'Please select a valid image file.'}
-        
-        if not prompt:
-            return {'success': False, 'error': 'Please provide a prompt describing the food item.'}
-        
-        # Check file type
-        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
-        if '.' not in image_file.filename or \
-           image_file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
-            return {'success': False, 'error': 'Please upload a valid image file (PNG, JPG, JPEG, GIF, BMP).'}
-        
-        # Read image bytes
-        image_bytes = image_file.read()
-        
-        if len(image_bytes) == 0:
-            return {'success': False, 'error': 'The uploaded file is empty.'}
-        
-        # Run the model
-        original_path, result_path = run_segmentation(image_bytes, prompt)
-        
-        if original_path is None or result_path is None:
-            return {'success': False, 'error': 'Could not detect the specified object. Please try a different prompt or image.'}
-        
-        return {
-            'success': True,
-            'original_path': f'/{original_path}',
-            'result_path': f'/{result_path}'
-        }
-        
-    except Exception as e:
-        print(f"Error in segment route: {str(e)}")
-        return {'success': False, 'error': f'An error occurred during processing: {str(e)}'}
-
-# Route to serve static files
-@app.route('/static/<path:filename>')
-def static_files(filename):
-    return send_from_directory('static', filename)
-
-# Route to serve images
-@app.route('/static/images/<path:filename>')
-def serve_images(filename):
-    return send_from_directory('static/images', filename)
+    """Mock segment endpoint for testing."""
+    return {
+        'success': False, 
+        'error': 'This is a test endpoint. The actual segmentation requires the ML models to be loaded.'
+    }
 
 if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print("Starting test server...")
+    print("Visit http://localhost:5001 to test the template")
+    app.run(debug=True, host='0.0.0.0', port=5001) 
