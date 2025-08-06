@@ -164,161 +164,515 @@ def run_segmentation(image_bytes: bytes, prompt: str):
         print(f"Error in run_segmentation: {str(e)}")
         return None, None
 
-# HTML for the web interface
+# HTML for web interface
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prompt-Guided Food Segmentation</title>
+    <title>Food Segmentation With GroundingDINO and MobileSAM</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #333;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-            color: #555;
-        }
-        input[type="file"], input[type="text"] {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
+        * {
+            margin: 0;
+            padding: 0;
             box-sizing: border-box;
         }
-        button {
-            background-color: #007bff;
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
             color: white;
-            padding: 12px 24px;
-            border: none;
-            border-radius: 5px;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            font-weight: 300;
+        }
+
+        .main-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            margin-bottom: 30px;
+        }
+
+        .form-section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .section-title i {
+            color: #667eea;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #4a5568;
+            font-size: 0.95rem;
+        }
+
+        .file-upload-area {
+            border: 2px dashed #cbd5e0;
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            transition: all 0.3s ease;
             cursor: pointer;
-            font-size: 16px;
-            width: 100%;
-            transition: background-color 0.3s;
+            background: #f7fafc;
         }
-        button:hover {
-            background-color: #0056b3;
+
+        .file-upload-area:hover {
+            border-color: #667eea;
+            background: #edf2f7;
         }
-        button:disabled {
-            background-color: #6c757d;
-            cursor: not-allowed;
+
+        .file-upload-area.dragover {
+            border-color: #667eea;
+            background: #e6fffa;
         }
-        .results {
-            margin-top: 30px;
+
+        .file-upload-icon {
+            font-size: 3rem;
+            color: #a0aec0;
+            margin-bottom: 15px;
+        }
+
+        .file-upload-text {
+            color: #718096;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+
+        .file-upload-hint {
+            color: #a0aec0;
+            font-size: 0.9rem;
+        }
+
+        .file-input {
             display: none;
         }
-        .image-container {
+
+        .text-input {
+            width: 100%;
+            padding: 16px 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .text-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .text-input::placeholder {
+            color: #a0aec0;
+        }
+
+        .prompt-suggestions {
             display: flex;
-            gap: 20px;
-            margin-top: 20px;
             flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
         }
-        .image-box {
-            flex: 1;
-            min-width: 300px;
+
+        .suggestion-chip {
+            background: #edf2f7;
+            color: #4a5568;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+        }
+
+        .suggestion-chip:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-1px);
+        }
+
+        .submit-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px 32px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .submit-btn i {
+            margin-right: 8px;
+        }
+
+        .loading-container {
             text-align: center;
+            padding: 40px 20px;
+            display: none;
         }
-        .image-box img {
-            max-width: 100%;
-            height: auto;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .error {
-            color: #dc3545;
-            text-align: center;
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #f8d7da;
-            border: 1px solid #f5c6cb;
-            border-radius: 5px;
-        }
-        .loading {
-            text-align: center;
-            margin-top: 20px;
-            color: #666;
-            padding: 20px;
-        }
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #007bff;
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #667eea;
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
             animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
+            margin: 0 auto 20px;
         }
+
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: #4a5568;
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        .error-container {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 16px 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            display: none;
+            border-left: 4px solid #e53e3e;
+        }
+
+        .results-container {
+            margin-top: 40px;
+            display: none;
+        }
+
+        .results-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .results-title {
+            font-size: 2rem;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+
+        .results-subtitle {
+            color: #718096;
+            font-size: 1.1rem;
+        }
+
+        .image-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .image-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            transition: transform 0.3s ease;
+        }
+
+        .image-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .image-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .image-wrapper {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .image-wrapper img {
+            width: 100%;
+            height: auto;
+            display: block;
+            transition: transform 0.3s ease;
+        }
+
+        .image-wrapper:hover img {
+            transform: scale(1.02);
+        }
+
+        .success-animation {
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .file-preview {
+            margin-top: 15px;
+            display: none;
+        }
+
+        .file-preview img {
+            max-width: 200px;
+            max-height: 150px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px 15px;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .main-card {
+                padding: 25px 20px;
+            }
+
+            .image-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+
+            .submit-btn {
+                padding: 14px 24px;
+                font-size: 1rem;
+            }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Food Segmentation with AI</h1>
-        
-        <form id="upload-form" enctype="multipart/form-data">
-            <div class="form-group">
-                <label for="image_file">Select an image to upload:</label>
-                <input type="file" name="image_file" id="image_file" accept="image/*" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="prompt">Enter a food prompt (e.g., 'the burger', 'pizza', 'salad'):</label>
-                <input type="text" name="prompt" id="prompt" placeholder="e.g., the burger, pizza, apple, salad" required>
-                <small style="color: #666; font-size: 12px;">Try specific prompts like "the burger", "pizza", "apple", "salad", "chicken", "rice", etc.</small>
-            </div>
-            
-            <button type="submit" id="submit-btn">Segment Food</button>
-        </form>
-        
-        <div id="loading" class="loading" style="display: none;">
-            <div class="spinner"></div>
-            Processing... Please wait.
+        <div class="header">
+            <h1><i class="fas fa-utensils"></i> Food Segmentation With GroundingDINO and MobileSAM</h1>
+            <p>Upload an image and describe the food item to get precise segmentation result</p>
         </div>
-        
-        <div id="error" class="error" style="display: none;"></div>
-        
-        <div id="results" class="results">
-            <h2>Results</h2>
-            <div class="image-container">
-                <div class="image-box">
-                    <h3>Original Image</h3>
-                    <img id="original-image" src="" alt="Original">
+
+        <div class="main-card">
+            <form id="upload-form" enctype="multipart/form-data">
+                <div class="form-section">
+                    <div class="section-title">
+                        <i class="fas fa-image"></i>
+                        Upload Image
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Select an image to upload</label>
+                        <div class="file-upload-area" id="file-upload-area">
+                            <div class="file-upload-icon">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </div>
+                            <div class="file-upload-text">Click to upload or drag and drop</div>
+                            <div class="file-upload-hint">Supports: JPG, PNG, GIF, BMP (Max 10MB)</div>
+                            <input type="file" name="image_file" id="image_file" accept="image/*" class="file-input" required>
+                        </div>
+                        <div class="file-preview" id="file-preview"></div>
+                    </div>
                 </div>
-                <div class="image-box">
-                    <h3>Segmented Object</h3>
-                    <img id="result-image" src="" alt="Segmented">
+
+                <div class="form-section">
+                    <div class="section-title">
+                        <i class="fas fa-comment"></i>
+                        Describe the Food
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Enter a food prompt</label>
+                        <input type="text" name="prompt" id="prompt" class="text-input" 
+                               placeholder="e.g., Waakye, Popcorn, Mango, Sliced Yam, Boiled Egg" required>
+                        
+                        <div class="prompt-suggestions">
+                            <button type="button" class="suggestion-chip" onclick="setPrompt('Waakye')">Waakye</button>
+                            <button type="button" class="suggestion-chip" onclick="setPrompt('Popcorn')">Popcorn</button>
+                            <button type="button" class="suggestion-chip" onclick="setPrompt('Mango')">Mango</button>
+                            <button type="button" class="suggestion-chip" onclick="setPrompt('Boiled Egg')">Boiled Egg</button>
+                            <button type="button" class="suggestion-chip" onclick="setPrompt('Sliced Yam')">Sliced Yam</button>
+                            <button type="button" class="suggestion-chip" onclick="setPrompt('Tomato')">Tomato</button>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" id="submit-btn" class="submit-btn">
+                    <i class="fas fa-magic"></i>
+                    Segment Food
+                </button>
+            </form>
+
+            <div id="loading" class="loading-container">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">Processing your image...</div>
+            </div>
+
+            <div id="error" class="error-container"></div>
+
+            <div id="results" class="results-container">
+                <div class="results-header">
+                    <div class="results-title">Segmentation Results</div>
+                    <div class="results-subtitle">Your food item has been successfully segmented</div>
+                </div>
+                
+                <div class="image-grid">
+                    <div class="image-card">
+                        <div class="image-title">Original Image</div>
+                        <div class="image-wrapper">
+                            <img id="original-image" src="" alt="Original">
+                        </div>
+                    </div>
+                    <div class="image-card">
+                        <div class="image-title">Segmentation Result</div>
+                        <div class="image-wrapper">
+                            <img id="result-image" src="" alt="Segmented">
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
+        // File upload handling
+        const fileUploadArea = document.getElementById('file-upload-area');
+        const fileInput = document.getElementById('image_file');
+        const filePreview = document.getElementById('file-preview');
+
+        fileUploadArea.addEventListener('click', () => fileInput.click());
+        
+        fileUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileUploadArea.classList.add('dragover');
+        });
+
+        fileUploadArea.addEventListener('dragleave', () => {
+            fileUploadArea.classList.remove('dragover');
+        });
+
+        fileUploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileUploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                handleFileSelect(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            if (file && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    filePreview.innerHTML = `<img src="${e.target.result}" alt="Preview">`;
+                    filePreview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Prompt suggestions
+        function setPrompt(prompt) {
+            document.getElementById('prompt').value = prompt;
+        }
+
+        // Form submission
         document.getElementById('upload-form').addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -338,7 +692,7 @@ HTML_TEMPLATE = """
             }
             
             if (!prompt) {
-                showError('Please enter a prompt.');
+                showError('Please enter a prompt describing the food item.');
                 return;
             }
             
@@ -347,6 +701,7 @@ HTML_TEMPLATE = """
             error.style.display = 'none';
             results.style.display = 'none';
             submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
             
             try {
                 const response = await fetch('/segment', {
@@ -365,7 +720,13 @@ HTML_TEMPLATE = """
                     const timestamp = new Date().getTime();
                     document.getElementById('original-image').src = result.original_path + '?t=' + timestamp;
                     document.getElementById('result-image').src = result.result_path + '?t=' + timestamp;
+                    
+                    // Show results with animation
                     results.style.display = 'block';
+                    results.classList.add('success-animation');
+                    
+                    // Scroll to results
+                    results.scrollIntoView({ behavior: 'smooth' });
                 } else {
                     showError(result.error || 'An error occurred during processing.');
                 }
@@ -375,6 +736,7 @@ HTML_TEMPLATE = """
             } finally {
                 loading.style.display = 'none';
                 submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-magic"></i> Segment Food';
             }
         });
         
@@ -382,25 +744,25 @@ HTML_TEMPLATE = """
             const error = document.getElementById('error');
             error.textContent = message;
             error.style.display = 'block';
+            error.scrollIntoView({ behavior: 'smooth' });
         }
-        
-        // Preview image before upload
-        document.getElementById('image_file').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    // You could add a preview here if needed
-                };
-                reader.readAsDataURL(file);
-            }
+
+        // Add some interactive effects
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add pulse animation to submit button on page load
+            const submitBtn = document.getElementById('submit-btn');
+            submitBtn.classList.add('pulse');
+            
+            setTimeout(() => {
+                submitBtn.classList.remove('pulse');
+            }, 2000);
         });
     </script>
 </body>
 </html>
 """
 
-# --- Web App Routes ---
+# Web App Routes
 
 @app.route('/')
 def index():
@@ -421,12 +783,11 @@ def health_check():
 
 @app.route('/test_sam')
 def test_sam():
-    """Test endpoint to verify SAM functionality"""
     if sam_predictor is None:
         return {'error': 'SAM predictor not loaded'}
     
     try:
-        # Create a simple test image
+        # Create simple test image
         test_image = np.zeros((100, 100, 3), dtype=np.uint8)
         test_image[25:75, 25:75] = [255, 255, 255]  # White square
         
@@ -462,10 +823,10 @@ def segment():
     try:
         # Check if models are loaded
         if grounding_dino is None:
-            return {'success': False, 'error': 'GroundingDINO model is not loaded. Please check the server logs.'}
+            return {'success': False, 'error': 'GroundingDINO model is not loaded. Check the server logs.'}
         
         if sam_predictor is None:
-            return {'success': False, 'error': 'MobileSAM model is not loaded. Please check the server logs.'}
+            return {'success': False, 'error': 'MobileSAM model is not loaded. Check the server logs.'}
         
         if 'image_file' not in request.files:
             return {'success': False, 'error': 'No image file provided.'}
@@ -483,7 +844,7 @@ def segment():
         allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
         if '.' not in image_file.filename or \
            image_file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
-            return {'success': False, 'error': 'Please upload a valid image file (PNG, JPG, JPEG, GIF, BMP).'}
+            return {'success': False, 'error': 'Upload a valid image file (PNG, JPG, JPEG, GIF, BMP).'}
         
         # Read image bytes
         image_bytes = image_file.read()
@@ -491,11 +852,11 @@ def segment():
         if len(image_bytes) == 0:
             return {'success': False, 'error': 'The uploaded file is empty.'}
         
-        # Run the model
+        # Run model
         original_path, result_path = run_segmentation(image_bytes, prompt)
         
         if original_path is None or result_path is None:
-            return {'success': False, 'error': 'Could not detect the specified object. Please try a different prompt or image. Make sure your prompt clearly describes the food item you want to segment (e.g., "the burger", "pizza", "salad", "apple").'}
+            return {'success': False, 'error': 'Could not detect the specified object. Try a different prompt or image. Make sure your prompt clearly describes the food item you want to segment (e.g., "the boiled Egg", "Red Tomato Stew", "Green Lettuce", "Sliced Watermelon").'}
         
         return {
             'success': True,

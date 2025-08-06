@@ -3,7 +3,7 @@ import sys
 import numpy as np
 import cv2
 
-# Add the current directory to the path
+# Add current directory to the path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 def test_imports():

@@ -6,7 +6,7 @@ import cv2
 from typing import Optional, Tuple, Any
 from pathlib import Path
 
-# Add the project directories to sys.path
+# Add project directories to sys.path
 ABS_PROJECT_DIR = Path(__file__).parent.parent.absolute()
 GROUNDING_DINO_DIR = ABS_PROJECT_DIR / "webapp" / "GroundingDINO"
 MOBILE_SAM_DIR = ABS_PROJECT_DIR / "webapp" / "MobileSAM"

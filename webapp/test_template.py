@@ -1,7 +1,7 @@
 from flask import Flask, render_template_string
 import os
 
-# Create a minimal Flask app for testing
+# Create minimal Flask app for testing
 app = Flask(__name__)
 
 # HTML template from app.py (simplified for testing)
