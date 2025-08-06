@@ -577,11 +577,11 @@ HTML_TEMPLATE = """
                         
                         <div class="prompt-suggestions">
                             <button type="button" class="suggestion-chip" onclick="setPrompt('Waakye')">Waakye</button>
-                            <button type="button" class="suggestion-chip" onclick="setPrompt('Popcorn')">Popcorn</button>
-                            <button type="button" class="suggestion-chip" onclick="setPrompt('Mango')">Mango</button>
+                            <button type="button" class="suggestion-chip" onclick="setPrompt('Popcorn')">White Popcorn</button>
+                            <button type="button" class="suggestion-chip" onclick="setPrompt('Mango')">Sliced Mango</button>
                             <button type="button" class="suggestion-chip" onclick="setPrompt('Boiled Egg')">Boiled Egg</button>
                             <button type="button" class="suggestion-chip" onclick="setPrompt('Sliced Yam')">Sliced Yam</button>
-                            <button type="button" class="suggestion-chip" onclick="setPrompt('Tomato')">Tomato</button>
+                            <button type="button" class="suggestion-chip" onclick="setPrompt('Tomato')">Tomato Stew</button>
                         </div>
                     </div>
                 </div>
