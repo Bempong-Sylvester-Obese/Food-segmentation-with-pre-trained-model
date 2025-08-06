@@ -9,3 +9,5 @@ __pycache__/
 *.pyzwz
 *app.cpython-313.pyc
 *model_loader.cpython-313.pyc
+*debug_sam.cpython-313.pyc
+*model_loader.cpython-311.pyc
