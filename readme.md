@@ -232,10 +232,11 @@ Please refer to their respective licenses for model usage terms.
 - Health check endpoint
 - Comprehensive testing suite
 - MobileSAMv2 support
+- Enhanced UI/UX improvements
 
 🔄 **In Progress:**
 - Performance optimization for large images
 - Additional model fine-tuning options
-- Enhanced UI/UX improvements
+- Food Nutritional Content Analysis
 
 **Note**: This project is designed for experimental purposes. The models are pre-trained and may not work perfectly on all types of food images. For production use, consider fine-tuning the models on your specific dataset.
