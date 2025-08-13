@@ -5,6 +5,16 @@
 
 A comprehensive project for prompt-guided food segmentation using state-of-the-art pre-trained models. This project combines GroundingDINO for object detection and MobileSAM for precise segmentation, providing both a Google Colab Notebook for experimentation and a Flask web application for easy deployment.
 
+## 📚 **IMPORTANT: Research First!**
+
+Before diving into the implementation, we strongly recommend reading through the research papers in the `research/` folder to understand the theoretical foundations and capabilities of the pre-trained models used in this project:
+
+- **GroundingDINO Research**: Understanding prompt-guided object detection
+- **Guided Diffusion Model for Adversarial Purification**: Advanced model techniques
+- **Image Segmentation Using Text and Image Prompts**: Core segmentation concepts
+
+These papers provide valuable insights into how the models work, their limitations, and best practices for optimal results.
+
 ## 🚀 Features
 
 - **Prompt-guided segmentation**: Upload an image and provide a text prompt to segment specific food items
