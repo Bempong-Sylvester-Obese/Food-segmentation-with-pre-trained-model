@@ -5,8 +5,6 @@ import torch
 import uuid
 import os
 import traceback
-
-# Import the pre-loaded models from model_loader
 from model_loader import grounding_dino, sam_predictor, device
 
 # Setup Flask App 
