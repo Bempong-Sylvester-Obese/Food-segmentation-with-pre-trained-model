@@ -180,7 +180,7 @@ HTML_TEMPLATE = """
 
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
             min-height: 100vh;
             color: #333;
             line-height: 1.6;
@@ -236,7 +236,7 @@ HTML_TEMPLATE = """
         }
 
         .section-title i {
-            color: #667eea;
+            color: #22c55e;
         }
 
         .form-group {
@@ -262,13 +262,13 @@ HTML_TEMPLATE = """
         }
 
         .file-upload-area:hover {
-            border-color: #667eea;
+            border-color: #22c55e;
             background: #edf2f7;
         }
 
         .file-upload-area.dragover {
-            border-color: #667eea;
-            background: #e6fffa;
+            border-color: #22c55e;
+            background: #f0fdf4;
         }
 
         .file-upload-icon {
@@ -304,8 +304,8 @@ HTML_TEMPLATE = """
 
         .text-input:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: #22c55e;
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
         }
 
         .text-input::placeholder {
@@ -331,13 +331,13 @@ HTML_TEMPLATE = """
         }
 
         .suggestion-chip:hover {
-            background: #667eea;
+            background: #22c55e;
             color: white;
             transform: translateY(-1px);
         }
 
         .submit-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
             color: white;
             padding: 16px 32px;
             border: none;
@@ -353,7 +353,7 @@ HTML_TEMPLATE = """
 
         .submit-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+            box-shadow: 0 10px 25px rgba(34, 197, 94, 0.3);
         }
 
         .submit-btn:disabled {
@@ -376,7 +376,7 @@ HTML_TEMPLATE = """
             width: 60px;
             height: 60px;
             border: 4px solid #f3f4f6;
-            border-top: 4px solid #667eea;
+            border-top: 4px solid #22c55e;
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin: 0 auto 20px;

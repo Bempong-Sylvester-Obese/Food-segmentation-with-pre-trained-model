@@ -6,10 +6,8 @@ import urllib.request
 from typing import Optional, Union
 from pathlib import Path
 
-# Define absolute project directory
 ABS_PROJECT_DIR = Path(__file__).parent.parent.absolute()
 
-# Define device
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {DEVICE}")
 
@@ -23,7 +21,7 @@ for directory in [GROUNDING_DINO_DIR, MOBILE_SAM_DIR]:
         sys.path.insert(0, str(directory))
         print(f"Added {directory} to sys.path")
 
-# Import GroundingDINO with proper error handling
+# Import GroundingDINO 
 GroundingDINO: Optional[type] = None
 try:
     from groundingdino.util.inference import Model as GroundingDINO
@@ -40,7 +38,7 @@ except ImportError as e:
         print(f"Alternative import also failed: {e2}")
         print("Please ensure GroundingDINO is properly installed")
 
-# Import MobileSAM with proper error handling
+# Import MobileSAM 
 sam_model_registry: Optional[dict] = None
 SamPredictor: Optional[type] = None
 
@@ -70,7 +68,7 @@ def download_groundingdino_checkpoint() -> bool:
             return False
     return True
 
-# Check if model files exist and download if necessary
+# Check if model files exist and download
 if not GROUNDING_DINO_CONFIG_PATH.exists():
     print(f"Warning: GroundingDINO config file not found at {GROUNDING_DINO_CONFIG_PATH}")
     
@@ -82,7 +80,7 @@ if not GROUNDING_DINO_CHECKPOINT_PATH.exists():
 if not MOBILE_SAM_CHECKPOINT_PATH.exists():
     print(f"Warning: MobileSAM checkpoint file not found at {MOBILE_SAM_CHECKPOINT_PATH}")
 
-# Initialize models with error handling
+# Initialize models
 grounding_dino_model: Optional[GroundingDINO] = None
 sam_predictor: Optional[SamPredictor] = None
 
