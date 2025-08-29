@@ -10,7 +10,6 @@ from model_loader import grounding_dino, sam_predictor, device
 # Setup Flask App 
 app = Flask(__name__)
 
-# Create a directory to store uploaded and generated images
 os.makedirs("static/images", exist_ok=True)
 
 # Main Inference Function
