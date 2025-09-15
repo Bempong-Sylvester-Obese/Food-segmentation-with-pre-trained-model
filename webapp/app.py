@@ -7,7 +7,6 @@ import os
 import traceback
 from model_loader import grounding_dino, sam_predictor, device
 
-# Setup Flask App 
 app = Flask(__name__)
 
 os.makedirs("static/images", exist_ok=True)
