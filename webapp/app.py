@@ -43,7 +43,7 @@ def run_segmentation(image_bytes: bytes, prompt: str):
             text_threshold=0.25
         )
 
-        # Check if any objects were detected
+        # Check object detection
         if detections is None or len(detections.xyxy) == 0:
             print(f"No objects detected for prompt: '{prompt}'")
             return None, None # No object detected
@@ -64,7 +64,6 @@ def run_segmentation(image_bytes: bytes, prompt: str):
         print(f"Input boxes: {input_boxes}")
 
         try:
-            # Use predict method instead of predict_torch for better compatibility
             masks, scores, logits = sam_predictor.predict(
                 point_coords=None,
                 point_labels=None,
@@ -111,7 +110,6 @@ def run_segmentation(image_bytes: bytes, prompt: str):
                 print(f"Error in alternative MobileSAM prediction: {str(e2)}")
                 return None, None
 
-        # Create a copy of the original image for visualization
         result_image = source_image.copy()
         
         # Create a colored overlay for the segmentation mask
@@ -783,7 +781,7 @@ def test_sam():
         return {'error': 'SAM predictor not loaded'}
     
     try:
-        # Create simple test image
+        # test image
         test_image = np.zeros((100, 100, 3), dtype=np.uint8)
         test_image[25:75, 25:75] = [255, 255, 255]  # White square
         
@@ -817,7 +815,7 @@ def test_sam():
 @app.route('/segment', methods=['POST'])
 def segment():
     try:
-        # Check if models are loaded
+        # Check models
         if grounding_dino is None:
             return {'success': False, 'error': 'GroundingDINO model is not loaded. Check the server logs.'}
         
@@ -836,19 +834,19 @@ def segment():
         if not prompt:
             return {'success': False, 'error': 'Please provide a prompt describing the food item.'}
         
-        # Check file type
+        # Check file types
         allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
         if '.' not in image_file.filename or \
            image_file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
             return {'success': False, 'error': 'Upload a valid image file (PNG, JPG, JPEG, GIF, BMP).'}
         
-        # Read image bytes
+        # Read image
         image_bytes = image_file.read()
         
         if len(image_bytes) == 0:
             return {'success': False, 'error': 'The uploaded file is empty.'}
         
-        # Run model
+        # Run models
         original_path, result_path = run_segmentation(image_bytes, prompt)
         
         if original_path is None or result_path is None:
