@@ -181,15 +181,6 @@ The project includes comprehensive testing results:
 - Supports various food types: burgers, pizza, fruits, vegetables, etc.
 - Real-time processing with automatic error handling
 
-## 🆕 Recent Updates
-
-- **Enhanced Model Support**: Added MobileSAMv2 for improved segmentation performance
-- **Automatic Model Download**: Models are automatically downloaded if not present
-- **Improved Error Handling**: Better validation and error messages
-- **Health Monitoring**: Added health check endpoint for production deployment
-- **Transparent Background**: Segmented objects are saved with transparent backgrounds
-- **Comprehensive Testing**: Extensive testing on 40+ food images with detailed results
-
 ## 🤝 Contributing
 
 1. Fork the repository
