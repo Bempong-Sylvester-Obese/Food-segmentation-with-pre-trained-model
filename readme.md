@@ -232,18 +232,6 @@ Please refer to their respective licenses for model usage terms.
 
 ## 🎯 Project Status
 
-✅ **Completed Features:**
-- GroundingDINO integration for object detection
-- MobileSAM integration for segmentation
-- Flask web application with user interface
-- Google Colab for experimentation
-- Automatic model downloading
-- Error handling and validation
-- Health check endpoint
-- Comprehensive testing suite
-- MobileSAMv2 support
-- Enhanced UI/UX improvements
-
 🔄 **In Progress:**
 - Performance optimization for large images
 - Additional model fine-tuning options
