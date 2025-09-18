@@ -181,30 +181,6 @@ The project includes comprehensive testing results:
 - Supports various food types: burgers, pizza, fruits, vegetables, etc.
 - Real-time processing with automatic error handling
 
-## 🔍 Troubleshooting
-
-1. **Import errors**: Make sure all dependencies are installed
-2. **Model loading errors**: Models are automatically downloaded if missing
-3. **CUDA errors**: The app defaults to CPU mode. For GPU acceleration, ensure CUDA is properly installed
-4. **Memory issues**: Large images may require more RAM. Consider resizing images if needed
-5. **Health check**: Use the `/health` endpoint to verify application status
-
-## 📝 Dependencies
-
-Key dependencies include:
-- `torch>=1.9.0`
-- `torchvision>=0.10.0`
-- `supervision>=0.3.0`
-- `opencv-python>=4.5.0`
-- `numpy>=1.21.0`
-- `flask>=2.0.0`
-- `transformers>=4.20.0`
-- `ultralytics>=8.0.0`
-- `gradio>=3.0.0`
-- `streamlit>=1.20.0`
-
-For a complete list, see `webapp/requirements.txt`.
-
 ## 🆕 Recent Updates
 
 - **Enhanced Model Support**: Added MobileSAMv2 for improved segmentation performance
