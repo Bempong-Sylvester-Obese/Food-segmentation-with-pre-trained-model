@@ -15,13 +15,11 @@ print(f"Using device: {DEVICE}")
 GROUNDING_DINO_DIR = ABS_PROJECT_DIR / "webapp" / "GroundingDINO"
 MOBILE_SAM_DIR = ABS_PROJECT_DIR / "webapp" / "MobileSAM"
 
-# Add directories to Python path for imports
 for directory in [GROUNDING_DINO_DIR, MOBILE_SAM_DIR]:
     if str(directory) not in sys.path:
         sys.path.insert(0, str(directory))
         print(f"Added {directory} to sys.path")
 
-# Import GroundingDINO
 GroundingDINO: Optional[type] = None
 try:
     from groundingdino.util.inference import Model as GroundingDINO
@@ -38,7 +36,6 @@ except ImportError as e:
         print(f"Alternative import also failed: {e2}")
         print("Please ensure GroundingDINO is properly installed")
 
-# Import MobileSAM 
 sam_model_registry: Optional[dict] = None
 SamPredictor: Optional[type] = None
 
@@ -49,7 +46,6 @@ except ImportError as e:
     print(f"Error importing MobileSAM: {e}")
     print("Please ensure MobileSAM is properly installed")
 
-# Configuration paths
 GROUNDING_DINO_CONFIG_PATH = GROUNDING_DINO_DIR / "groundingdino" / "config" / "GroundingDINO_SwinT_OGC.py"
 GROUNDING_DINO_CHECKPOINT_PATH = GROUNDING_DINO_DIR / "groundingdino_swint_ogc.pth"
 MOBILE_SAM_CHECKPOINT_PATH = MOBILE_SAM_DIR / "weights" / "mobile_sam.pt"
@@ -68,7 +64,6 @@ def download_groundingdino_checkpoint() -> bool:
             return False
     return True
 
-# Check if model files exist and download
 if not GROUNDING_DINO_CONFIG_PATH.exists():
     print(f"Warning: GroundingDINO config file not found at {GROUNDING_DINO_CONFIG_PATH}")
     
@@ -121,6 +116,6 @@ if sam_model_registry is not None and SamPredictor is not None:
 else:
     print("MobileSAM not available - skipping model loading")
 print("\nModel loading completed")
-# Export models and device for use in other modules
+
 grounding_dino = grounding_dino_model
 device = DEVICE
