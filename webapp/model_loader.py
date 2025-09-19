@@ -21,7 +21,7 @@ for directory in [GROUNDING_DINO_DIR, MOBILE_SAM_DIR]:
         sys.path.insert(0, str(directory))
         print(f"Added {directory} to sys.path")
 
-# Import GroundingDINO 
+# Import GroundingDINO
 GroundingDINO: Optional[type] = None
 try:
     from groundingdino.util.inference import Model as GroundingDINO
