@@ -112,7 +112,7 @@ def run_segmentation(image_bytes: bytes, prompt: str):
 
         result_image = source_image.copy()
         
-        # Create a colored overlay for the segmentation mask
+        # Overlay for the segmentation mask
         overlay = np.zeros_like(source_image)
         overlay[binary_mask > 0] = [0, 255, 0]  # Green overlay for segmentation
         
@@ -177,9 +177,9 @@ HTML_TEMPLATE = """
 
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            background: #f8fafc;
             min-height: 100vh;
-            color: #333;
+            color: #334155;
             line-height: 1.6;
         }
 
@@ -192,29 +192,27 @@ HTML_TEMPLATE = """
         .header {
             text-align: center;
             margin-bottom: 50px;
-            color: white;
+            color: #1e293b;
         }
 
         .header h1 {
             font-size: 3rem;
             font-weight: 700;
             margin-bottom: 10px;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
 
         .header p {
             font-size: 1.2rem;
-            opacity: 0.9;
-            font-weight: 300;
+            color: #64748b;
+            font-weight: 400;
         }
 
         .main-card {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(20px);
-            border-radius: 24px;
+            background: white;
+            border-radius: 12px;
             padding: 40px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid #e2e8f0;
             margin-bottom: 30px;
         }
 
@@ -225,7 +223,7 @@ HTML_TEMPLATE = """
         .section-title {
             font-size: 1.5rem;
             font-weight: 600;
-            color: #2d3748;
+            color: #334155;
             margin-bottom: 20px;
             display: flex;
             align-items: center;
@@ -233,7 +231,7 @@ HTML_TEMPLATE = """
         }
 
         .section-title i {
-            color: #22c55e;
+            color: #475569;
         }
 
         .form-group {
@@ -244,44 +242,44 @@ HTML_TEMPLATE = """
             display: block;
             margin-bottom: 8px;
             font-weight: 500;
-            color: #4a5568;
+            color: #374151;
             font-size: 0.95rem;
         }
 
         .file-upload-area {
-            border: 2px dashed #cbd5e0;
+            border: 2px dashed #d1d5db;
             border-radius: 12px;
             padding: 40px 20px;
             text-align: center;
             transition: all 0.3s ease;
             cursor: pointer;
-            background: #f7fafc;
+            background: #f9fafb;
         }
 
         .file-upload-area:hover {
-            border-color: #22c55e;
-            background: #edf2f7;
+            border-color: #6b7280;
+            background: #f3f4f6;
         }
 
         .file-upload-area.dragover {
-            border-color: #22c55e;
-            background: #f0fdf4;
+            border-color: #4b5563;
+            background: #f3f4f6;
         }
 
         .file-upload-icon {
             font-size: 3rem;
-            color: #a0aec0;
+            color: #9ca3af;
             margin-bottom: 15px;
         }
 
         .file-upload-text {
-            color: #718096;
+            color: #6b7280;
             font-size: 1.1rem;
             margin-bottom: 10px;
         }
 
         .file-upload-hint {
-            color: #a0aec0;
+            color: #9ca3af;
             font-size: 0.9rem;
         }
 
@@ -292,8 +290,8 @@ HTML_TEMPLATE = """
         .text-input {
             width: 100%;
             padding: 16px 20px;
-            border: 2px solid #e2e8f0;
-            border-radius: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
             font-size: 1rem;
             transition: all 0.3s ease;
             background: white;
@@ -301,12 +299,12 @@ HTML_TEMPLATE = """
 
         .text-input:focus {
             outline: none;
-            border-color: #22c55e;
-            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+            border-color: #4b5563;
+            box-shadow: 0 0 0 3px rgba(75, 85, 99, 0.1);
         }
 
         .text-input::placeholder {
-            color: #a0aec0;
+            color: #9ca3af;
         }
 
         .prompt-suggestions {
@@ -317,28 +315,28 @@ HTML_TEMPLATE = """
         }
 
         .suggestion-chip {
-            background: #edf2f7;
-            color: #4a5568;
+            background: #f3f4f6;
+            color: #374151;
             padding: 6px 12px;
             border-radius: 20px;
             font-size: 0.85rem;
             cursor: pointer;
             transition: all 0.2s ease;
-            border: none;
+            border: 1px solid #e5e7eb;
         }
 
         .suggestion-chip:hover {
-            background: #22c55e;
+            background: #4b5563;
             color: white;
             transform: translateY(-1px);
         }
 
         .submit-btn {
-            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            background: #374151;
             color: white;
             padding: 16px 32px;
             border: none;
-            border-radius: 12px;
+            border-radius: 8px;
             font-size: 1.1rem;
             font-weight: 600;
             cursor: pointer;
@@ -349,8 +347,9 @@ HTML_TEMPLATE = """
         }
 
         .submit-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(34, 197, 94, 0.3);
+            background: #4b5563;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
         }
 
         .submit-btn:disabled {
@@ -373,7 +372,7 @@ HTML_TEMPLATE = """
             width: 60px;
             height: 60px;
             border: 4px solid #f3f4f6;
-            border-top: 4px solid #22c55e;
+            border-top: 4px solid #4b5563;
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin: 0 auto 20px;
@@ -385,19 +384,19 @@ HTML_TEMPLATE = """
         }
 
         .loading-text {
-            color: #4a5568;
+            color: #374151;
             font-size: 1.1rem;
             font-weight: 500;
         }
 
         .error-container {
-            background: #fed7d7;
-            color: #c53030;
+            background: #fef2f2;
+            color: #dc2626;
             padding: 16px 20px;
-            border-radius: 12px;
+            border-radius: 8px;
             margin: 20px 0;
             display: none;
-            border-left: 4px solid #e53e3e;
+            border: 1px solid #fecaca;
         }
 
         .results-container {
@@ -413,12 +412,12 @@ HTML_TEMPLATE = """
         .results-title {
             font-size: 2rem;
             font-weight: 600;
-            color: #2d3748;
+            color: #334155;
             margin-bottom: 10px;
         }
 
         .results-subtitle {
-            color: #718096;
+            color: #64748b;
             font-size: 1.1rem;
         }
 
@@ -431,29 +430,31 @@ HTML_TEMPLATE = """
 
         .image-card {
             background: white;
-            border-radius: 16px;
+            border-radius: 8px;
             padding: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid #e5e7eb;
             transition: transform 0.3s ease;
         }
 
         .image-card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-2px);
         }
 
         .image-title {
             font-size: 1.2rem;
             font-weight: 600;
-            color: #2d3748;
+            color: #334155;
             margin-bottom: 15px;
             text-align: center;
         }
 
         .image-wrapper {
             position: relative;
-            border-radius: 12px;
+            border-radius: 8px;
             overflow: hidden;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid #e5e7eb;
         }
 
         .image-wrapper img {
