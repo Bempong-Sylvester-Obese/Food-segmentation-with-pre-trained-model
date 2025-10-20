@@ -6,7 +6,7 @@ set -e
 # Configuration
 PROJECT_ID=${PROJECT_ID:-"food-segmentation-0001"}
 SERVICE_NAME="food-segmentation"
-REGION="us-central1"
+REGION="africa-south1-a"
 IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
 
 echo "Starting deployment to Google Cloud Run..."
