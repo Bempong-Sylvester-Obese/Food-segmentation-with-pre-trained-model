@@ -632,7 +632,7 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <div class="header">
-            <h1><i class="fas fa-utensils"></i> Food Segmentation With GroundingDINO and MobileSAM</h1>
+            <h1>Food Segmentation With GroundingDINO and MobileSAM</h1>
             <p>Upload an image and describe the food item to get precise segmentation result</p>
         </div>
 
@@ -640,7 +640,6 @@ HTML_TEMPLATE = """
             <form id="upload-form" enctype="multipart/form-data">
                 <div class="form-section">
                     <div class="section-title">
-                        <i class="fas fa-image"></i>
                         Upload Image
                     </div>
                     
@@ -648,7 +647,6 @@ HTML_TEMPLATE = """
                         <label class="form-label">Select an image to upload</label>
                         <div class="file-upload-area" id="file-upload-area">
                             <div class="file-upload-icon">
-                                <i class="fas fa-cloud-upload-alt"></i>
                             </div>
                             <div class="file-upload-text">Click to upload or drag and drop</div>
                             <div class="file-upload-hint">Supports: JPG, PNG, GIF, BMP (Max 10MB)</div>
@@ -660,7 +658,6 @@ HTML_TEMPLATE = """
 
                 <div class="form-section">
                     <div class="section-title">
-                        <i class="fas fa-comment"></i>
                         Describe the Food
                     </div>
                     
@@ -681,7 +678,6 @@ HTML_TEMPLATE = """
                 </div>
 
                 <button type="submit" id="submit-btn" class="submit-btn">
-                    <i class="fas fa-magic"></i>
                     Segment Food
                 </button>
             </form>
@@ -860,7 +856,6 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def index():
-    """The main page with the upload form."""
     return HTML_TEMPLATE
 
 @app.route('/health')
