@@ -11,14 +11,23 @@ warnings.filterwarnings('ignore')
 
 ABS_PROJECT_DIR = Path(__file__).parent.parent.absolute()
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {DEVICE}")
+def get_device():
+    try:
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        else:
+            device = torch.device("cpu")
+        return device
+    except Exception as e:
+        print(f"Warning: Could not initialize CUDA device, falling back to CPU: {e}")
+        return torch.device("cpu")
 
-# Define paths
+DEVICE = None
+
 GROUNDING_DINO_DIR = ABS_PROJECT_DIR / "webapp" / "GroundingDINO"
 MOBILE_SAM_DIR = ABS_PROJECT_DIR / "webapp" / "MobileSAM"
 
-# Create directories
+# Directories
 try:
     GROUNDING_DINO_DIR.mkdir(parents=True, exist_ok=True)
     MOBILE_SAM_DIR.mkdir(parents=True, exist_ok=True)
@@ -210,7 +219,9 @@ def load_grounding_dino_model(config_path: Path, checkpoint_path: Path) -> Optio
         return None
     try:
         print("Loading GroundingDINO model...")
-        model = GroundingDINO(str(config_path), str(checkpoint_path), DEVICE)
+        device = get_device()
+        print(f"Using device: {device}")
+        model = GroundingDINO(str(config_path), str(checkpoint_path), device)
         print("GroundingDINO loaded successfully")
         return model
     except Exception as e:
@@ -223,8 +234,10 @@ def load_mobile_sam_model(checkpoint_path: Path, sam_type: str = "vit_t") -> Opt
         print("MobileSAM components not available")
         return None
     try:
+        device = get_device()
+        print(f"Using device: {device}")
         sam = sam_model_registry[sam_type](checkpoint=str(checkpoint_path))
-        sam.to(DEVICE)
+        sam.to(device)
         return SamPredictor(sam)
     except Exception as e:
         print(f"Error: {e}")
@@ -264,6 +277,14 @@ print(f"GroundingDINO: {'Loaded' if grounding_dino_model else 'Failed'}")
 print(f"MobileSAM: {'Loaded' if sam_predictor else 'Failed'}")
 
 grounding_dino = grounding_dino_model
-device = DEVICE
+
+def get_device_lazy():
+    global DEVICE
+    if DEVICE is None:
+        DEVICE = get_device()
+        print(f"Initialized device: {DEVICE}")
+    return DEVICE
+
+device = get_device_lazy
 
 print("\n=== Model loader completed ===")
