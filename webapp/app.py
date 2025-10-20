@@ -4,6 +4,8 @@ import numpy as np
 import uuid
 import os
 import traceback
+import gc
+import time
 
 try:
     import torch
@@ -16,25 +18,54 @@ except ImportError as e:
 grounding_dino = None
 sam_predictor = None
 device = None
+models_loaded = False
 
 def load_models():
-    global grounding_dino, sam_predictor, device
-    if grounding_dino is None or sam_predictor is None:
-        try:
-            from model_loader import grounding_dino as gd, sam_predictor as sp, device as dev
-            grounding_dino = gd
-            sam_predictor = sp
-            device = dev
-        except Exception as e:
-            print(f"Error loading models: {e}")
-            raise
+    """Load models with Cloud Run optimizations"""
+    global grounding_dino, sam_predictor, device, models_loaded
+    
+    if models_loaded and grounding_dino is not None and sam_predictor is not None:
+        return True
+        
+    print("Loading models for first time...")
+    start_time = time.time()
+    
+    try:
+        from model_loader import grounding_dino as gd, sam_predictor as sp, device as dev
+        grounding_dino = gd
+        sam_predictor = sp
+        device = dev
+        models_loaded = True
+        
+        load_time = time.time() - start_time
+        print(f"Models loaded successfully in {load_time:.2f} seconds")
+        
+        # Clear cache to free memory
+        if torch and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error loading models: {e}")
+        traceback.print_exc()
+        return False
 
 app = Flask(__name__)
 
+# Create directories
 os.makedirs("static/images", exist_ok=True)
+os.makedirs("static/GeneratedImages", exist_ok=True)
+
+# Load models on startup (optional - can be lazy loaded instead)
+print("Initializing application...")
 
 # Main Inference Function
 def run_segmentation(image_bytes: bytes, prompt: str):
+    """Run segmentation with Cloud Run optimizations"""
+    start_time = time.time()
+    
     try:
         # Validate inputs
         if not image_bytes:
@@ -42,13 +73,19 @@ def run_segmentation(image_bytes: bytes, prompt: str):
         
         if not prompt or not prompt.strip():
             raise ValueError("No prompt provided")
+        
+        # Check file size limit (10MB for Cloud Run)
+        max_size = 10 * 1024 * 1024  # 10MB
+        if len(image_bytes) > max_size:
+            raise ValueError(f"Image file too large. Maximum size is {max_size // (1024*1024)}MB.")
             
         # Check torch availability
         if not TORCH_AVAILABLE or torch is None:
             raise ValueError("PyTorch is not available. Please install PyTorch.")
         
         # Load models if not already loaded
-        load_models()
+        if not load_models():
+            raise ValueError("Failed to load models. Check the server logs.")
         
         if grounding_dino is None:
             raise ValueError("GroundingDINO model is not loaded. Check the server logs.")
@@ -63,10 +100,20 @@ def run_segmentation(image_bytes: bytes, prompt: str):
         if source_image is None:
             raise ValueError("Invalid image format. Please upload a valid image file.")
         
-        # Check image dimensions
+        # Check image dimensions and resize if too large for Cloud Run
         height, width = source_image.shape[:2]
         if height == 0 or width == 0:
             raise ValueError("Invalid image dimensions")
+        
+        # Resize image if too large (memory optimization for Cloud Run)
+        max_dim = 2048  # Maximum dimension
+        if max(height, width) > max_dim:
+            scale = max_dim / max(height, width)
+            new_width = int(width * scale)
+            new_height = int(height * scale)
+            source_image = cv2.resize(source_image, (new_width, new_height), interpolation=cv2.INTER_AREA)
+            height, width = source_image.shape[:2]
+            print(f"Resized image to: {width}x{height}")
             
         print(f"Processing image with dimensions: {width}x{height}")
         
@@ -191,10 +238,23 @@ def run_segmentation(image_bytes: bytes, prompt: str):
         if not os.path.exists(original_filename) or not os.path.exists(result_filename):
             raise ValueError("Failed to save processed images")
 
+        # Memory cleanup for Cloud Run
+        total_time = time.time() - start_time
+        print(f"Segmentation completed in {total_time:.2f} seconds")
+        
+        # Clear memory
+        if torch and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+        
         return original_filename, result_filename
         
     except Exception as e:
         print(f"Error in run_segmentation: {str(e)}")
+        # Ensure memory cleanup even on error
+        if torch and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
         return None, None
 
 # HTML for web interface
@@ -943,4 +1003,6 @@ def serve_images(filename):
     return send_from_directory('static/images', filename)
 
 if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    # Get port from environment variable (Cloud Run sets this)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(debug=False, host='0.0.0.0', port=port)
