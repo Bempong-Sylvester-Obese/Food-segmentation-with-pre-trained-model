@@ -5,7 +5,7 @@
 
 A comprehensive project for prompt-guided food segmentation using state-of-the-art pre-trained models. This project combines GroundingDINO for object detection and MobileSAM for precise segmentation, providing both a Google Colab Notebook for experimentation and a Flask web application for easy deployment.
 
-## 📚 **IMPORTANT: Research First!**
+## **IMPORTANT: Research First!**
 
 Before diving into the implementation, we strongly recommend reading through the research papers in the `research/` folder to understand the theoretical foundations and capabilities of the pre-trained models used in this project:
 
@@ -15,7 +15,7 @@ Before diving into the implementation, we strongly recommend reading through the
 
 These papers provide valuable insights into how the models work, their limitations, and best practices for optimal results.
 
-## 🚀 Features
+## Features
 
 - **Prompt-guided segmentation**: Upload an image and provide a text prompt to segment specific food items
 - **Real-time processing**: Fast inference using pre-trained models
@@ -30,7 +30,7 @@ These papers provide valuable insights into how the models work, their limitatio
 - **Error handling**: Robust error handling and validation for various edge cases
 - **Health check endpoint**: Built-in health monitoring for production deployment
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 Food-segmentation-with-pre-trained-model/
@@ -55,7 +55,7 @@ Food-segmentation-with-pre-trained-model/
 └── readme.md                  # This file
 ```
 
-## 🛠️ Prerequisites
+## Prerequisites
 
 Make sure you have the following installed:
 - Python 3.7+
@@ -65,7 +65,7 @@ Make sure you have the following installed:
 - Google Colab (for notebook experimentation)
 - Other dependencies listed in `webapp/requirements.txt`
 
-## 📦 Installation
+## Installation
 
 ### Option 1: Using Google Colab (Recommended for Development)
 
@@ -98,7 +98,7 @@ pip install -r requirements.txt
    - GroundingDINO checkpoint: `GroundingDINO/groundingdino_swint_ogc.pth`
    - MobileSAM checkpoint: `MobileSAM/weights/mobile_sam.pt`
 
-## 🚀 Usage
+## Usage
 
 ### Web Application
 
@@ -130,7 +130,7 @@ python app.py
    - Perform segmentation on sample images
    - Analyze results
 
-## 🔧 API Endpoints (Web Application)
+## API Endpoints (Web Application)
 
 - `GET /`: Main web interface
 - `POST /segment`: Process image segmentation (expects multipart form data with `image_file` and `prompt`)
@@ -138,7 +138,7 @@ python app.py
 - `GET /static/<filename>`: Serve static files (images)
 - `GET /static/images/<filename>`: Serve processed images
 
-## 🤖 Model Information
+## Model Information
 
 - **GroundingDINO**: Used for object detection based on text prompts
   - Repository: https://github.com/IDEA-Research/GroundingDINO
@@ -152,7 +152,7 @@ python app.py
   - Faster segmentation with improved accuracy
 - Both models run on CPU by default (GPU support available if CUDA is installed)
 
-## 🧪 Testing
+## Testing
 
 ### Web Application Testing
 
@@ -168,7 +168,7 @@ python test_app.py
 2. Try different prompts to test segmentation accuracy
 3. Check the `Results/` directory for example outputs
 
-## 📊 Results
+## Results
 
 The project includes comprehensive testing results:
 - **Sample Results**: Check `Results/accurateresults/` for successful segmentations
@@ -181,7 +181,7 @@ The project includes comprehensive testing results:
 - Supports various food types: burgers, pizza, fruits, vegetables, etc.
 - Real-time processing with automatic error handling
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -189,7 +189,7 @@ The project includes comprehensive testing results:
 4. Add tests if applicable
 5. Submit a pull request
 
-## 📄 License
+## License
 
 This project uses pre-trained models from:
 - GroundingDINO: https://github.com/IDEA-Research/GroundingDINO
@@ -197,9 +197,9 @@ This project uses pre-trained models from:
 
 Please refer to their respective licenses for model usage terms.
 
-## 🎯 Project Status
+## Project Status
 
-🔄 **In Progress:**
+ **In Progress:**
 - Performance optimization for large images
 - Additional model fine-tuning options
 - Food Nutritional Content Analysis
