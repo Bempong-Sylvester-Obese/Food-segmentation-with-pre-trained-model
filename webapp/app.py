@@ -21,7 +21,6 @@ device = None
 models_loaded = False
 
 def load_models():
-    """Load models with Cloud Run optimizations"""
     global grounding_dino, sam_predictor, device, models_loaded
     
     if models_loaded and grounding_dino is not None and sam_predictor is not None:
@@ -54,11 +53,10 @@ def load_models():
 
 app = Flask(__name__)
 
-# Create directories
 os.makedirs("static/images", exist_ok=True)
 os.makedirs("static/GeneratedImages", exist_ok=True)
 
-# Load models on startup (optional - can be lazy loaded instead)
+# Load models on startup
 print("Initializing application...")
 
 # Main Inference Function
@@ -66,7 +64,6 @@ def run_segmentation(image_bytes: bytes, prompt: str):
     start_time = time.time()
     
     try:
-        # Validate inputs
         if not image_bytes:
             raise ValueError("No image data provided")
         
@@ -78,7 +75,6 @@ def run_segmentation(image_bytes: bytes, prompt: str):
         if len(image_bytes) > max_size:
             raise ValueError(f"Image file too large. Maximum size is {max_size // (1024*1024)}MB.")
             
-        # Check torch availability
         if not TORCH_AVAILABLE or torch is None:
             raise ValueError("PyTorch is not available. Please install PyTorch.")
         
@@ -172,7 +168,6 @@ def run_segmentation(image_bytes: bytes, prompt: str):
             # Alternative approach with point prompts
             try:
                 print("Trying alternative approach with point prompts...")
-                # Center point of the bounding box
                 box = detections.xyxy[0]
                 center_x = int((box[0] + box[2]) / 2)
                 center_y = int((box[1] + box[3]) / 2)
@@ -208,16 +203,10 @@ def run_segmentation(image_bytes: bytes, prompt: str):
         # Draw bounding boxes
         for box in detections.xyxy:
             x1, y1, x2, y2 = map(int, box)
-            # Draw rectangle with red color and thickness 2
             cv2.rectangle(result_image, (x1, y1), (x2, y2), (0, 0, 255), 2)
-            
-            # Add label with confidence score
             label = f"{prompt}"
-            # Get text size
             (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-            # Draw background rectangle for text
             cv2.rectangle(result_image, (x1, y1 - text_height - 10), (x1 + text_width + 10, y1), (0, 0, 255), -1)
-            # Draw text
             cv2.putText(result_image, label, (x1 + 5, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
         # Generate unique filenames to avoid conflicts
@@ -233,7 +222,7 @@ def run_segmentation(image_bytes: bytes, prompt: str):
         cv2.imwrite(original_filename, source_image)
         cv2.imwrite(result_filename, result_image)
         
-        # Verify files were created
+        # Verify files
         if not os.path.exists(original_filename) or not os.path.exists(result_filename):
             raise ValueError("Failed to save processed images")
 
@@ -250,7 +239,7 @@ def run_segmentation(image_bytes: bytes, prompt: str):
         
     except Exception as e:
         print(f"Error in run_segmentation: {str(e)}")
-        # Ensure memory cleanup even on error
+        # Memory cleanup
         if torch and torch.cuda.is_available():
             torch.cuda.empty_cache()
         gc.collect()
@@ -933,13 +922,11 @@ def test_sam():
 @app.route('/segment', methods=['POST'])
 def segment():
     try:
-        # Try to load models first
         try:
             load_models()
         except Exception as e:
             return {'success': False, 'error': f'Failed to load models: {str(e)}'}
         
-        # Check models
         if grounding_dino is None:
             return {'success': False, 'error': 'GroundingDINO model is not loaded. Check the server logs.'}
         
@@ -958,7 +945,6 @@ def segment():
         if not prompt:
             return {'success': False, 'error': 'Please provide a prompt describing the food item.'}
         
-        # Check file types
         allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
         if '.' not in image_file.filename or \
            image_file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
@@ -997,6 +983,5 @@ def serve_images(filename):
     return send_from_directory('static/images', filename)
 
 if __name__ == "__main__":
-    # Get port from environment variable (Cloud Run sets this)
     port = int(os.environ.get("PORT", 8080))
     app.run(debug=False, host='0.0.0.0', port=port)
