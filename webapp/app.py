@@ -63,7 +63,6 @@ print("Initializing application...")
 
 # Main Inference Function
 def run_segmentation(image_bytes: bytes, prompt: str):
-    """Run segmentation with Cloud Run optimizations"""
     start_time = time.time()
     
     try:
