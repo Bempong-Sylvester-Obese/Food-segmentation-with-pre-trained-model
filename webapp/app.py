@@ -394,30 +394,6 @@ HTML_TEMPLATE = """
             color: #9ca3af;
         }
 
-        .prompt-suggestions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 12px;
-        }
-
-        .suggestion-chip {
-            background: #f3f4f6;
-            color: #374151;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            border: 1px solid #e5e7eb;
-        }
-
-        .suggestion-chip:hover {
-            background: #4b5563;
-            color: white;
-            transform: translateY(-1px);
-        }
-
         .submit-btn {
             background: #374151;
             color: white;
@@ -653,15 +629,6 @@ HTML_TEMPLATE = """
                         <label class="form-label">Enter a food prompt</label>
                         <input type="text" name="prompt" id="prompt" class="text-input" 
                                placeholder="e.g., Waakye, Popcorn, Mango, Sliced Yam, Boiled Egg" required>
-                        
-                        <div class="prompt-suggestions">
-                            <button type="button" class="suggestion-chip" onclick="setPrompt('Waakye')">Waakye</button>
-                            <button type="button" class="suggestion-chip" onclick="setPrompt('Popcorn')">White Popcorn</button>
-                            <button type="button" class="suggestion-chip" onclick="setPrompt('Mango')">Sliced Mango</button>
-                            <button type="button" class="suggestion-chip" onclick="setPrompt('Boiled Egg')">Boiled Egg</button>
-                            <button type="button" class="suggestion-chip" onclick="setPrompt('Sliced Yam')">Sliced Yam</button>
-                            <button type="button" class="suggestion-chip" onclick="setPrompt('Tomato')">Tomato Stew</button>
-                        </div>
                     </div>
                 </div>
 
@@ -743,11 +710,6 @@ HTML_TEMPLATE = """
                 };
                 reader.readAsDataURL(file);
             }
-        }
-
-        // Prompt suggestions
-        function setPrompt(prompt) {
-            document.getElementById('prompt').value = prompt;
         }
 
         // Form submission
@@ -878,47 +840,6 @@ def health_check():
             'torch_available': TORCH_AVAILABLE
         }
 
-@app.route('/test_sam')
-def test_sam():
-    try:
-        load_models()
-        if sam_predictor is None:
-            return {'error': 'SAM predictor not loaded'}
-    except Exception as e:
-        return {'error': f'Failed to load models: {str(e)}'}
-    
-    try:
-        # test image
-        test_image = np.zeros((100, 100, 3), dtype=np.uint8)
-        test_image[25:75, 25:75] = [255, 255, 255]  # White square
-        
-        # Set the image
-        sam_predictor.set_image(test_image)
-        
-        # Try to predict with a simple box
-        test_box = np.array([30, 30, 70, 70])
-        
-        masks, scores, logits = sam_predictor.predict(
-            point_coords=None,
-            point_labels=None,
-            box=test_box,
-            multimask_output=False,
-        )
-        
-        return {
-            'success': True,
-            'masks_shape': masks.shape if masks is not None else None,
-            'scores': scores.tolist() if scores is not None else None,
-            'test_box': test_box.tolist()
-        }
-        
-    except Exception as e:
-        return {
-            'success': False,
-            'error': str(e),
-            'traceback': traceback.format_exc()
-        }
-
 @app.route('/segment', methods=['POST'])
 def segment():
     try:
@@ -976,11 +897,6 @@ def segment():
 @app.route('/static/<path:filename>')
 def static_files(filename):
     return send_from_directory('static', filename)
-
-# Route to serve images
-@app.route('/static/images/<path:filename>')
-def serve_images(filename):
-    return send_from_directory('static/images', filename)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
