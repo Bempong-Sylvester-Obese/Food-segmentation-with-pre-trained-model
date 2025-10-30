@@ -1,11 +1,11 @@
-from flask import Flask, request, render_template_string, send_from_directory
+from flask import Flask, request, render_template_string
 import cv2
 import numpy as np
-import uuid
-import os
 import traceback
 import gc
 import time
+import base64
+import os
 
 try:
     import torch
@@ -52,9 +52,6 @@ def load_models():
         return False
 
 app = Flask(__name__)
-
-os.makedirs("static/images", exist_ok=True)
-os.makedirs("static/GeneratedImages", exist_ok=True)
 
 # Load models on startup
 print("Initializing application...")
@@ -209,22 +206,12 @@ def run_segmentation(image_bytes: bytes, prompt: str):
             cv2.rectangle(result_image, (x1, y1 - text_height - 10), (x1 + text_width + 10, y1), (0, 0, 255), -1)
             cv2.putText(result_image, label, (x1 + 5, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
-        # Generate unique filenames to avoid conflicts
-        unique_id = uuid.uuid4()
-        original_filename = f"static/images/{unique_id}_original.png"
-        result_filename = f"static/GeneratedImages/{unique_id}_result.png"
-
-        # Ensure the directories exist
-        os.makedirs("static/images", exist_ok=True)
-        os.makedirs("static/GeneratedImages", exist_ok=True)
-
-        # Save images
-        cv2.imwrite(original_filename, source_image)
-        cv2.imwrite(result_filename, result_image)
+        # Convert images to base64 instead of saving to disk
+        _, original_buffer = cv2.imencode('.png', source_image)
+        _, result_buffer = cv2.imencode('.png', result_image)
         
-        # Verify files
-        if not os.path.exists(original_filename) or not os.path.exists(result_filename):
-            raise ValueError("Failed to save processed images")
+        original_base64 = base64.b64encode(original_buffer).decode('utf-8')
+        result_base64 = base64.b64encode(result_buffer).decode('utf-8')
 
         # Memory cleanup for Cloud Run
         total_time = time.time() - start_time
@@ -235,7 +222,7 @@ def run_segmentation(image_bytes: bytes, prompt: str):
             torch.cuda.empty_cache()
         gc.collect()
         
-        return original_filename, result_filename
+        return original_base64, result_base64
         
     except Exception as e:
         print(f"Error in run_segmentation: {str(e)}")
@@ -756,10 +743,9 @@ HTML_TEMPLATE = """
                 const result = await response.json();
                 
                 if (result.success) {
-                    // Add timestamp to prevent caching
-                    const timestamp = new Date().getTime();
-                    document.getElementById('original-image').src = result.original_path + '?t=' + timestamp;
-                    document.getElementById('result-image').src = result.result_path + '?t=' + timestamp;
+                    // Display base64 images
+                    document.getElementById('original-image').src = 'data:image/png;base64,' + result.original_image;
+                    document.getElementById('result-image').src = 'data:image/png;base64,' + result.result_image;
                     
                     // Show results with animation
                     results.style.display = 'block';
@@ -878,25 +864,20 @@ def segment():
             return {'success': False, 'error': 'The uploaded file is empty.'}
         
         # Run models
-        original_path, result_path = run_segmentation(image_bytes, prompt)
+        original_base64, result_base64 = run_segmentation(image_bytes, prompt)
         
-        if original_path is None or result_path is None:
+        if original_base64 is None or result_base64 is None:
             return {'success': False, 'error': 'Could not detect the specified object. Try a different prompt or image. Make sure your prompt clearly describes the food item you want to segment (e.g., "the boiled Egg", "Red Tomato Stew", "Green Lettuce", "Sliced Watermelon").'}
         
         return {
             'success': True,
-            'original_path': f'/{original_path}',
-            'result_path': f'/{result_path}'
+            'original_image': original_base64,
+            'result_image': result_base64
         }
         
     except Exception as e:
         print(f"Error in segment route: {str(e)}")
         return {'success': False, 'error': f'An error occurred during processing: {str(e)}'}
-
-# Route to serve static files
-@app.route('/static/<path:filename>')
-def static_files(filename):
-    return send_from_directory('static', filename)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
