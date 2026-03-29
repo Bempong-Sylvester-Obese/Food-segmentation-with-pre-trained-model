@@ -67,7 +67,7 @@ def run_segmentation(image_bytes: bytes, prompt: str):
         if not prompt or not prompt.strip():
             raise ValueError("No prompt provided")
         
-        # Check file size limit (10MB for Cloud Run)
+        # Check file size limit (10MB)
         max_size = 10 * 1024 * 1024  # 10MB
         if len(image_bytes) > max_size:
             raise ValueError(f"Image file too large. Maximum size is {max_size // (1024*1024)}MB.")
@@ -92,12 +92,12 @@ def run_segmentation(image_bytes: bytes, prompt: str):
         if source_image is None:
             raise ValueError("Invalid image format. Please upload a valid image file.")
         
-        # Check image dimensions and resize if too large for Cloud Run
+        # Check image dimensions and resize if too large
         height, width = source_image.shape[:2]
         if height == 0 or width == 0:
             raise ValueError("Invalid image dimensions")
         
-        # Resize image if too large (memory optimization for Cloud Run)
+        # Resize image if too large (memory optimization)
         max_dim = 2048  # Maximum dimension
         if max(height, width) > max_dim:
             scale = max_dim / max(height, width)
@@ -213,7 +213,7 @@ def run_segmentation(image_bytes: bytes, prompt: str):
         original_base64 = base64.b64encode(original_buffer).decode('utf-8')
         result_base64 = base64.b64encode(result_buffer).decode('utf-8')
 
-        # Memory cleanup for Cloud Run
+        # Memory cleanup after inference
         total_time = time.time() - start_time
         print(f"Segmentation completed in {total_time:.2f} seconds")
         
