@@ -3,6 +3,7 @@ FROM python:3.9-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
+    build-essential \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
@@ -35,6 +36,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 COPY . .
 
+RUN pip install --no-cache-dir -e webapp/GroundingDINO && \
+    pip install --no-cache-dir -e webapp/MobileSAM
+
 ENV PYTHONPATH=/app
 ENV PORT=8080
 ENV FLASK_APP=webapp/app.py
@@ -43,8 +47,8 @@ RUN mkdir -p webapp/static/images webapp/static/GeneratedImages
 
 EXPOSE 8080
 
-RUN useradd -m -u 1000 cloudrunuser && chown -R cloudrunuser:cloudrunuser /app
-USER cloudrunuser
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
 
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1

@@ -24,7 +24,7 @@ These papers provide valuable insights into how the models work, their limitatio
   - Flask web application for easy deployment
 - **User-friendly interface**: Clean, responsive web interface
 - **Transparent background**: Segmented objects are saved with transparent backgrounds
-- **Comprehensive testing**: Built-in test suite to verify functionality
+- **Docker**: `Dockerfile` at the repo root for containerized runs (see below)
 - **Multiple model support**: Includes both MobileSAM and MobileSAMv2 for enhanced performance
 - **Automatic model download**: Models are automatically downloaded if not present
 - **Error handling**: Robust error handling and validation for various edge cases
@@ -34,12 +34,11 @@ These papers provide valuable insights into how the models work, their limitatio
 
 ```
 Food-segmentation-with-pre-trained-model/
+├── requirements.txt            # Python dependencies (Docker + local install)
 ├── Food_Segmentation.ipynb     # Google Colab notebook for experimentation
 ├── webapp/                     # Flask web application
 │   ├── app.py                  # Main Flask application with segmentation logic
 │   ├── model_loader.py         # Model loading and initialization with auto-download
-│   ├── test_app.py             # Test script for validation
-│   ├── requirements.txt        # Python dependencies
 │   ├── static/                 # Static files (generated images)
 │   │   ├── images/            # Uploaded and processed images
 │   │   └── GeneratedImages/   # Segmentation results with transparent backgrounds
@@ -63,7 +62,7 @@ Make sure you have the following installed:
 - OpenCV
 - Flask
 - Google Colab (for notebook experimentation)
-- Other dependencies listed in `webapp/requirements.txt`
+- Other dependencies listed in `requirements.txt` (repository root)
 
 ## Installation
 
@@ -84,19 +83,36 @@ Make sure you have the following installed:
 
 ### Option 2: Using the Web Application
 
-1. Navigate to the webapp directory:
-```bash
-cd webapp
-```
-
-2. Install dependencies:
+1. From the repository root, install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. The application will automatically download model files if they don't exist:
-   - GroundingDINO checkpoint: `GroundingDINO/groundingdino_swint_ogc.pth`
-   - MobileSAM checkpoint: `MobileSAM/weights/mobile_sam.pt`
+2. Install **GroundingDINO** as a package so `import groundingdino` works (the repo already includes the sources under `webapp/GroundingDINO`):
+```bash
+pip install -e webapp/GroundingDINO
+```
+   This step compiles small native extensions when possible. For **GPU**, install a CUDA-enabled PyTorch build first so the compile step matches your toolkit. For **CPU-only**, ensure you have a C++ compiler available (e.g. Xcode CLI tools on macOS, `build-essential` on Debian/Ubuntu); if the extension build fails, check the [upstream GroundingDINO](https://github.com/IDEA-Research/GroundingDINO) issues for your platform.
+
+3. Optional but recommended: install **MobileSAM** from the vendored copy so imports are consistent:
+```bash
+pip install -e webapp/MobileSAM
+```
+
+4. The application will automatically download model files if they don't exist:
+   - GroundingDINO checkpoint: `webapp/GroundingDINO/groundingdino_swint_ogc.pth`
+   - MobileSAM checkpoint: `webapp/MobileSAM/weights/mobile_sam.pt`
+
+### Option 3: Docker
+
+From the repository root (where the `Dockerfile` lives):
+
+```bash
+docker build -t food-segmentation .
+docker run --rm -p 8080:8080 food-segmentation
+```
+
+The app listens on port `8080` (see `Dockerfile` `ENV PORT=8080`). Open `http://127.0.0.1:8080` and use the `/health` endpoint for readiness checks.
 
 ## Usage
 
@@ -153,14 +169,6 @@ python app.py
 - Both models run on CPU by default (GPU support available if CUDA is installed)
 
 ## Testing
-
-### Web Application Testing
-
-Run the test script to verify everything is working:
-```bash
-cd webapp
-python test_app.py
-```
 
 ### Manual Testing
 
