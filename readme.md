@@ -88,9 +88,9 @@ Make sure you have the following installed:
 pip install -r requirements.txt
 ```
 
-2. Install **GroundingDINO** as a package so `import groundingdino` works (the repo already includes the sources under `webapp/GroundingDINO`):
+2. Install **GroundingDINO** as a package so `import groundingdino` works (the repo already includes the sources under `webapp/GroundingDINO`). Use `--no-build-isolation` so the build sees your already-installed PyTorch (the upstream `setup.py` is not compatible with PEP 517 isolated builds):
 ```bash
-pip install -e webapp/GroundingDINO
+pip install -e webapp/GroundingDINO --no-build-isolation
 ```
    This step compiles small native extensions when possible. For **GPU**, install a CUDA-enabled PyTorch build first so the compile step matches your toolkit. For **CPU-only**, ensure you have a C++ compiler available (e.g. Xcode CLI tools on macOS, `build-essential` on Debian/Ubuntu); if the extension build fails, check the [upstream GroundingDINO](https://github.com/IDEA-Research/GroundingDINO) issues for your platform.
 
@@ -114,21 +114,25 @@ docker run --rm -p 8080:8080 food-segmentation
 
 The app listens on port `8080` (see `Dockerfile` `ENV PORT=8080`). Open `http://127.0.0.1:8080` and use the `/health` endpoint for readiness checks.
 
+### Troubleshooting (local run)
+
+- **Use this repo’s venv** from the project root: `source .venv/bin/activate`, then `cd webapp` and `python app.py`. Mixing Conda’s `python` with a partially-updated `.venv` can produce errors like `No module named 'werkzeug.datastructures.range'`; fix with `pip install -r ../requirements.txt` (or recreate `.venv`).
+- **GroundingDINO and `transformers`**: this project pins **`transformers` 4.x** (not 5.x). Version 5 removed BERT helpers that GroundingDINO still expects (`get_head_mask`), which shows up as `BertModel` attribute errors during model load. Keep dependencies in sync via `requirements.txt`.
+- **Port already in use**: local `python app.py` defaults to port **5001**. If that fails too, run `PORT=8765 python app.py` (any free port). Docker still uses **8080** inside the container via `ENV PORT=8080`.
+
 ## Usage
 
 ### Web Application
 
-1. Start the web application:
+1. Activate the project venv from the repo root, then start the app (default port **5001** for local runs; override if that is busy):
 ```bash
+source .venv/bin/activate
 cd webapp
 python app.py
+# or e.g. PORT=8765 python app.py
 ```
 
-2.Click on any of the local host domains available to open in your default web browser:
-```
- * http://127.0.0.1:5001
- * http://192.168.0.181:5001
-```
+2. Open the app in your browser, e.g. `http://127.0.0.1:5001` (or whatever port Flask prints). If you see “address already in use”, pick another: `PORT=8765 python app.py`.
 
 3. Upload an image and enter a prompt describing the food item you want to segment (e.g., "Banku", "Jollof Rice", "Tomato Stew")
 

@@ -880,5 +880,7 @@ def segment():
         return {'success': False, 'error': f'An error occurred during processing: {str(e)}'}
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
+    # Default 5001 for local runs — 8080 is often taken (proxies, other services).
+    # Override: PORT=8080 python app.py   or   export PORT=8765
+    port = int(os.environ.get("PORT", "5001"))
     app.run(debug=False, host='0.0.0.0', port=port)

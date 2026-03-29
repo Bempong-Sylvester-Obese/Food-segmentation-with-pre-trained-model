@@ -36,8 +36,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 COPY . .
 
-RUN pip install --no-cache-dir -e webapp/GroundingDINO && \
-    pip install --no-cache-dir -e webapp/MobileSAM
+RUN pip install --no-cache-dir -e webapp/GroundingDINO --no-build-isolation && \
+    pip install --no-cache-dir -e webapp/MobileSAM --no-build-isolation
 
 ENV PYTHONPATH=/app
 ENV PORT=8080
