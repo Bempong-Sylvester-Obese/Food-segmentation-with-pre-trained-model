@@ -174,6 +174,21 @@ python app.py
 
 ## Testing
 
+### Automated tests (pytest)
+
+From the repository root, install dev dependencies and run the fast suite (integration tests that load real models are excluded by default):
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+The first pytest run may take a while with little output while **PyTorch** and **OpenCV** load; that is expected on some setups.
+
+- **Integration / full pipeline** (slow; needs checkpoints and may download weights):  
+  `RUN_MODEL_INTEGRATION=1 pytest -m integration`
+- **`git status` slow locally?** Ensure you are not scanning a huge untracked tree: the root [`.gitignore`](.gitignore) ignores `.venv/`, caches, and generated static paths. Vendored `webapp/GroundingDINO` and `webapp/MobileSAM` are plain source trees and do **not** need a nested `.git` folder for the app to work; update them by replacing the directory or using a pinned VCS dependency if you prefer not to vendor.
+
 ### Manual Testing
 
 1. Use the sample images in the `images/` directory (40+ food images available)
