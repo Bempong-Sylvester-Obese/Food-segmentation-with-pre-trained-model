@@ -1,0 +1,4 @@
+{
+  "extraPaths": ["webapp"],
+  "executionEnvironments": [{ "root": "tests", "extraPaths": ["webapp"] }]
+}

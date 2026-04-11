@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request
 import cv2
 import numpy as np
 import traceback
@@ -853,21 +853,14 @@ def segment():
             return {'success': False, 'error': 'Please provide a prompt describing the food item.'}
         
         allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
-        if '.' not in image_file.filename or \
-           image_file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
+
+        filename =  image_file.filename
+        if not filename or '.' not in filename or \
+            filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
             return {'success': False, 'error': 'Upload a valid image file (PNG, JPG, JPEG, GIF, BMP).'}
         
-        # Read image
-        image_bytes = image_file.read()
-        
-        if len(image_bytes) == 0:
-            return {'success': False, 'error': 'The uploaded file is empty.'}
-        
         # Run models
-        original_base64, result_base64 = run_segmentation(image_bytes, prompt)
-        
-        if original_base64 is None or result_base64 is None:
-            return {'success': False, 'error': 'Could not detect the specified object. Try a different prompt or image. Make sure your prompt clearly describes the food item you want to segment (e.g., "the boiled Egg", "Red Tomato Stew", "Green Lettuce", "Sliced Watermelon").'}
+        original_base64, result_base64 = run_segmentation(image_file.read(), prompt)
         
         return {
             'success': True,

@@ -1,0 +1,49 @@
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Webapp runtime outputs (uploads / generated images)
+webapp/static/images/
+webapp/static/GeneratedImages/
+
+# Model checkpoints
+*.pth
+*.pt
+*.onnx
+*.ckpt
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Pyright   
+.pyrightconfig.json
+.pyright/
+
+.ruff_cache/

@@ -1,9 +1,7 @@
-import supervision as sv
 import sys
 import os
 import torch
-import urllib.request
-from typing import Optional, Union, Any
+from typing import Any, Optional
 from pathlib import Path
 import warnings
 import traceback
@@ -37,13 +35,13 @@ except Exception as e:
     print(f"Warning: Could not create directories: {e}")
 
 # Initialize model variables
-GroundingDINO: Optional[type] = None
+GroundingDINO: Optional[Any] = None
 sam_model_registry: Optional[dict] = None
-SamPredictor: Optional[type] = None
+SamPredictor: Optional[Any] = None
 
 
 # ---------------- UTILS ----------------
-def safe_import(module_name: str, from_list: list = None, as_name: str = None):
+def safe_import(module_name: str, from_list: Optional[list] = None, as_name: Optional[str] = None):
     try:
         if from_list:
             module = __import__(module_name, fromlist=from_list)
