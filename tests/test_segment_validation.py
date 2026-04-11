@@ -14,7 +14,6 @@ def test_segment_missing_image_file(client, segment_mocks):
     assert data["success"] is False
     assert "image" in data["error"].lower() or "file" in data["error"].lower()
 
-
 def test_segment_empty_filename(client, segment_mocks, tiny_png_bytes):
     response = client.post(
         "/segment",
@@ -27,7 +26,7 @@ def test_segment_empty_filename(client, segment_mocks, tiny_png_bytes):
     assert response.status_code == 200
     data = response.get_json()
     assert data["success"] is False
-
+    assert "empty" in data["error"].lower()
 
 def test_segment_empty_prompt(client, segment_mocks, tiny_png_bytes):
     response = client.post(
@@ -43,7 +42,6 @@ def test_segment_empty_prompt(client, segment_mocks, tiny_png_bytes):
     assert data["success"] is False
     assert "prompt" in data["error"].lower()
 
-
 def test_segment_bad_extension(client, segment_mocks, tiny_png_bytes):
     response = client.post(
         "/segment",
@@ -58,7 +56,6 @@ def test_segment_bad_extension(client, segment_mocks, tiny_png_bytes):
     assert data["success"] is False
     assert "valid" in data["error"].lower() or "upload" in data["error"].lower()
 
-
 def test_segment_empty_file_body(client, segment_mocks):
     response = client.post(
         "/segment",
@@ -71,7 +68,7 @@ def test_segment_empty_file_body(client, segment_mocks):
     assert response.status_code == 200
     data = response.get_json()
     assert data["success"] is False
-
+    assert "empty" in data["error"].lower()
 
 def test_segment_success_when_run_segmentation_mocked(client, segment_mocks, tiny_png_bytes, monkeypatch):
     import app as m

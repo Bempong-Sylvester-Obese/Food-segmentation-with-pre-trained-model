@@ -44,5 +44,6 @@ webapp/static/GeneratedImages/
 
 # Pyright   
 .pyrightconfig.json
+.pyright/
 
 .ruff_cache/
