@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Food Segmentation</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111c2e;
+      --panel-2: #162238;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #22c55e;
+      --accent-hover: #16a34a;
+      --danger: #ef4444;
+      --border: #1f2a44;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+    }
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 4rem;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    header h1 {
+      margin: 0 0 0.5rem;
+      font-size: 2rem;
+    }
+    header p {
+      margin: 0;
+      color: var(--muted);
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    }
+    form {
+      display: grid;
+      gap: 1rem;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+    }
+    input[type="file"],
+    input[type="text"] {
+      width: 100%;
+      padding: 0.75rem 0.9rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      font-size: 1rem;
+    }
+    input[type="text"]::placeholder { color: var(--muted); }
+    button {
+      padding: 0.8rem 1.2rem;
+      border: 0;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #0b1220;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 120ms ease;
+    }
+    button:hover:not(:disabled) { background: var(--accent-hover); }
+    button:disabled { opacity: 0.6; cursor: progress; }
+
+    #status {
+      margin-top: 1rem;
+      min-height: 1.25rem;
+      color: var(--muted);
+    }
+    #status.error { color: var(--danger); }
+    #status.ok { color: var(--accent); }
+
+    .results {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: 1fr;
+      margin-top: 1.5rem;
+    }
+    @media (min-width: 720px) {
+      .results { grid-template-columns: 1fr 1fr; }
+    }
+    .results figure {
+      margin: 0;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .results figcaption {
+      padding: 0.6rem 0.9rem;
+      font-size: 0.9rem;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .results img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #000;
+    }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Food Segmentation</h1>
+      <p>Upload an image and describe what to segment (e.g. &quot;jollof rice&quot;, &quot;plantain&quot;).</p>
+    </header>
+
+    <section class="card">
+      <form id="segment-form">
+        <div>
+          <label for="image_file">Image</label>
+          <input id="image_file" name="image_file" type="file" accept="image/*" required />
+        </div>
+        <div>
+          <label for="prompt">Prompt</label>
+          <input id="prompt" name="prompt" type="text" placeholder="e.g. jollof rice" required />
+        </div>
+        <div>
+          <button type="submit" id="submit-btn">Segment</button>
+        </div>
+        <div id="status" role="status" aria-live="polite"></div>
+      </form>
+    </section>
+
+    <section class="results hidden" id="results">
+      <figure>
+        <figcaption>Original</figcaption>
+        <img id="original-img" alt="Original uploaded image" />
+      </figure>
+      <figure>
+        <figcaption>Segmented</figcaption>
+        <img id="result-img" alt="Segmented result" />
+      </figure>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const form = document.getElementById("segment-form");
+      const statusEl = document.getElementById("status");
+      const submitBtn = document.getElementById("submit-btn");
+      const resultsEl = document.getElementById("results");
+      const originalImg = document.getElementById("original-img");
+      const resultImg = document.getElementById("result-img");
+
+      function setStatus(message, kind) {
+        statusEl.textContent = message || "";
+        statusEl.classList.remove("error", "ok");
+        if (kind) statusEl.classList.add(kind);
+      }
+
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        resultsEl.classList.add("hidden");
+        setStatus("Running segmentation...", null);
+        submitBtn.disabled = true;
+
+        try {
+          const formData = new FormData(form);
+          const response = await fetch("/segment", {
+            method: "POST",
+            body: formData,
+          });
+          const data = await response.json();
+
+          if (!data.success) {
+            setStatus(data.error || "Segmentation failed.", "error");
+            return;
+          }
+
+          originalImg.src = "data:image/png;base64," + data.original_image;
+          resultImg.src = "data:image/png;base64," + data.result_image;
+          resultsEl.classList.remove("hidden");
+          setStatus("Done.", "ok");
+        } catch (err) {
+          setStatus("Network or server error: " + err.message, "error");
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
