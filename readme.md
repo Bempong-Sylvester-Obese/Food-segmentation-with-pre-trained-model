@@ -26,7 +26,7 @@ Before running the code, skim the papers in `Research/` to understand what the m
 
 ## Project structure
 
-```
+```text
 Food-segmentation-with-pre-trained-model/
 ├── .github/workflows/ci.yml       # Ruff + pytest CI
 ├── Dockerfile                     # python:3.11-slim base, gunicorn on :8080
