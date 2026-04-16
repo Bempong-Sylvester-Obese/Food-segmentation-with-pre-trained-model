@@ -3,232 +3,222 @@
 <img width="1489" height="402" alt="Unknown" src="https://github.com/user-attachments/assets/ac699880-2d8c-4ba0-8614-248f586e8bca" />
 <img width="1489" height="402" alt="Unknown-2" src="https://github.com/user-attachments/assets/921cdd81-8236-40d3-a31e-2c7f9a8891ab" />
 
-A comprehensive project for prompt-guided food segmentation using state-of-the-art pre-trained models. This project combines GroundingDINO for object detection and MobileSAM for precise segmentation, providing both a Google Colab Notebook for experimentation and a Flask web application for easy deployment.
+A project for prompt-guided food segmentation using pre-trained models. [GroundingDINO](https://github.com/IDEA-Research/GroundingDINO) performs text-conditioned object detection and [MobileSAM](https://github.com/ChaoningZhang/MobileSAM) produces precise masks. The repository ships a Flask web application (`webapp/`) and a Google Colab notebook (`Food_Segmentation.ipynb`) for experimentation.
 
-## **IMPORTANT: Research First!**
+## Research first
 
-Before diving into the implementation, we strongly recommend reading through the research papers in the `research/` folder to understand the theoretical foundations and capabilities of the pre-trained models used in this project:
+Before running the code, skim the papers in `Research/` to understand what the models are (and are not) good at:
 
-- **GroundingDINO Research**: Understanding prompt-guided object detection
-- **Guided Diffusion Model for Adversarial Purification**: Advanced model techniques
-- **Image Segmentation Using Text and Image Prompts**: Core segmentation concepts
-
-These papers provide valuable insights into how the models work, their limitations, and best practices for optimal results.
+- **GroundingDINO** — prompt-guided object detection
+- **Guided Diffusion Model for Adversarial Purification**
+- **Image Segmentation Using Text and Image Prompts**
 
 ## Features
 
-- **Prompt-guided segmentation**: Upload an image and provide a text prompt to segment specific food items
-- **Real-time processing**: Fast inference using pre-trained models
-- **Multiple interfaces**: 
-  - Google Colab notebook for experimentation and analysis
-  - Flask web application for easy deployment
-- **User-friendly interface**: Clean, responsive web interface
-- **Transparent background**: Segmented objects are saved with transparent backgrounds
-- **Docker**: `Dockerfile` at the repo root for containerized runs (see below)
-- **Multiple model support**: Includes both MobileSAM and MobileSAMv2 for enhanced performance
-- **Automatic model download**: Models are automatically downloaded if not present
-- **Error handling**: Robust error handling and validation for various edge cases
-- **Health check endpoint**: Built-in health monitoring for production deployment
+- Prompt-guided segmentation: upload an image, describe the target (e.g. `jollof rice`), get an overlay mask.
+- Flask web UI served from a Jinja template (`webapp/templates/index.html`).
+- JSON API: `POST /segment` returns base64-encoded original + result images.
+- Health endpoint (`/health`) reporting model-load state, device, and torch availability.
+- Automatic checkpoint download on first run (with connect/read timeouts and exponential backoff retries) into `webapp/GroundingDINO/` and `webapp/MobileSAM/weights/`.
+- Gunicorn-ready: `load_models()` runs at import time under `--preload`, so the first request is not stuck waiting for PyTorch.
+- Docker: `Dockerfile` at the repo root runs on Python 3.11 and serves on port 8080.
+- CI: ruff lint + format checks and pytest on every push/PR (see `.github/workflows/ci.yml`).
 
-## Project Structure
+## Project structure
 
 ```
 Food-segmentation-with-pre-trained-model/
-├── requirements.txt            # Python dependencies (Docker + local install)
-├── Food_Segmentation.ipynb     # Google Colab notebook for experimentation
-├── webapp/                     # Flask web application
-│   ├── app.py                  # Main Flask application with segmentation logic
-│   ├── model_loader.py         # Model loading and initialization with auto-download
-│   ├── static/                 # Static files (generated images)
-│   │   ├── images/            # Uploaded and processed images
-│   │   └── GeneratedImages/   # Segmentation results with transparent backgrounds
-│   ├── GroundingDINO/         # GroundingDINO model files
-│   └── MobileSAM/             # MobileSAM and MobileSAMv2 model files
-│       ├── MobileSAMv2/       # Enhanced MobileSAMv2 implementation
-│       └── weights/           # Model weights
-├── images/                     # Sample food images for testing (40+ images)
-├── Results/                    # Segmentation results and analysis
-│   ├── accurateresults/       # Successful segmentation results
-│   ├── inaccuracies/          # Failed segmentation cases
-│   └── result.json            # Detailed results data (7,000+ lines)
-└── readme.md                  # This file
+├── .github/workflows/ci.yml       # Ruff + pytest CI
+├── Dockerfile                     # python:3.11-slim base, gunicorn on :8080
+├── requirements.txt               # Runtime deps (torch, flask, groundingdino deps, ...)
+├── requirements-dev.txt           # pytest, pytest-cov, ruff (pulls in requirements.txt)
+├── ruff.toml                      # target-version=py311, select=E/F/W/I, line-length=120
+├── pyproject.toml                 # [tool.pytest.ini_options] only
+├── cursor.md                      # Agent / Cursor orientation notes
+├── Food_Segmentation.ipynb        # Google Colab workflow
+├── webapp/
+│   ├── app.py                     # Flask app: /, /health, /segment, run_segmentation()
+│   ├── model_loader.py            # Imports + downloads + loads GroundingDINO & MobileSAM
+│   ├── templates/index.html       # Upload UI (rendered via render_template)
+│   ├── GroundingDINO/             # Vendored GroundingDINO (editable install target)
+│   └── MobileSAM/                 # Vendored MobileSAM + MobileSAMv2
+├── tests/
+│   ├── conftest.py                # Flask client + model mocks
+│   ├── test_routes.py             # /, /health
+│   ├── test_segment_validation.py # /segment input validation + success path (mocked)
+│   ├── test_segmentation_unit.py  # run_segmentation() unit checks
+│   └── test_segment_integration.py# Full pipeline (opt-in via RUN_MODEL_INTEGRATION=1)
+├── Food images/                   # Sample food images for manual testing
+├── Research/                      # Reference papers
+└── Results/                       # Example outputs + analysis
 ```
 
 ## Prerequisites
 
-Make sure you have the following installed:
-- Python 3.7+
-- PyTorch
-- OpenCV
-- Flask
-- Google Colab (for notebook experimentation)
-- Other dependencies listed in `requirements.txt` (repository root)
+- **Python 3.11** (the Dockerfile, CI, and `ruff.toml` target `py311`; older Python 3.9 fails at import time on modern type-annotation syntax, and Python 3.14 does not yet have compatible `torch` wheels).
+- A C++ toolchain if you want GroundingDINO's native CUDA ops (Xcode CLI tools on macOS, `build-essential` on Debian/Ubuntu). CPU-only builds work without the native extensions.
+- Deps listed in `requirements.txt` (PyTorch, OpenCV headless, Flask, transformers <5, timm, supervision, etc.).
 
 ## Installation
 
-### Option 1: Using Google Colab (Recommended for Development)
+### Option 1: Local Flask app
 
-1. Open the Jupyter notebook in Google Colab:
-   - Click the "Open in Colab" button in the notebook
-   - Or manually upload `Food_Segmentation.ipynb` to Google Colab
+From the repository root:
 
-2. The notebook will automatically:
-   - Set up the environment
-   - Clone the required model repositories
-   - Install all dependencies
-   - Download model weights
-   - Load the models for experimentation
-
-3. Run the cells sequentially to perform food segmentation experiments
-
-### Option 2: Using the Web Application
-
-1. From the repository root, install dependencies:
 ```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+
 pip install -r requirements.txt
-```
 
-2. Install **GroundingDINO** as a package so `import groundingdino` works (the repo already includes the sources under `webapp/GroundingDINO`). Use `--no-build-isolation` so the build sees your already-installed PyTorch (the upstream `setup.py` is not compatible with PEP 517 isolated builds):
-```bash
 pip install -e webapp/GroundingDINO --no-build-isolation
-```
-   This step compiles small native extensions when possible. For **GPU**, install a CUDA-enabled PyTorch build first so the compile step matches your toolkit. For **CPU-only**, ensure you have a C++ compiler available (e.g. Xcode CLI tools on macOS, `build-essential` on Debian/Ubuntu); if the extension build fails, check the [upstream GroundingDINO](https://github.com/IDEA-Research/GroundingDINO) issues for your platform.
-
-3. Optional but recommended: install **MobileSAM** from the vendored copy so imports are consistent:
-```bash
-pip install -e webapp/MobileSAM
+pip install -e webapp/MobileSAM --no-build-isolation
 ```
 
-4. The application will automatically download model files if they don't exist:
-   - GroundingDINO checkpoint: `webapp/GroundingDINO/groundingdino_swint_ogc.pth`
-   - MobileSAM checkpoint: `webapp/MobileSAM/weights/mobile_sam.pt`
+`--no-build-isolation` is required for GroundingDINO so the build sees your already-installed PyTorch; the upstream `setup.py` is not compatible with PEP 517 isolated builds.
 
-### Option 3: Docker
+Checkpoints are downloaded automatically on first load into:
 
-From the repository root (where the `Dockerfile` lives):
+- `webapp/GroundingDINO/groundingdino_swint_ogc.pth`
+- `webapp/MobileSAM/weights/mobile_sam.pt`
+
+### Option 2: Docker
 
 ```bash
 docker build -t food-segmentation .
 docker run --rm -p 8080:8080 food-segmentation
 ```
 
-The app listens on port `8080` (see `Dockerfile` `ENV PORT=8080`). Open `http://127.0.0.1:8080` and use the `/health` endpoint for readiness checks.
+The container runs `gunicorn --preload webapp.app:app` on port **8080**. `--preload` plus the import-time `load_models()` means models are loaded once at boot rather than on the first HTTP request. Health check: `GET /health`.
 
-### Troubleshooting (local run)
+### Option 3: Google Colab
 
-- **Use this repo’s venv** from the project root: `source .venv/bin/activate`, then `cd webapp` and `python app.py`. Mixing Conda’s `python` with a partially-updated `.venv` can produce errors like `No module named 'werkzeug.datastructures.range'`; fix with `pip install -r ../requirements.txt` (or recreate `.venv`).
-- **GroundingDINO and `transformers`**: this project pins **`transformers` 4.x** (not 5.x). Version 5 removed BERT helpers that GroundingDINO still expects (`get_head_mask`), which shows up as `BertModel` attribute errors during model load. Keep dependencies in sync via `requirements.txt`.
-- **Port already in use**: local `python app.py` defaults to port **5001**. If that fails too, run `PORT=8765 python app.py` (any free port). Docker still uses **8080** inside the container via `ENV PORT=8080`.
+Open `Food_Segmentation.ipynb` in Google Colab and run the cells top to bottom. The notebook clones the upstream GroundingDINO/MobileSAM repos, installs deps, downloads weights, and runs segmentation on sample images.
 
-## Usage
+### Troubleshooting
 
-### Web Application
+- **Python 3.14 `.venv` hangs on `import torch`** — torch does not ship wheels for 3.14 yet. Recreate the venv on Python 3.11: `python3.11 -m venv .venv && pip install -r requirements.txt`.
+- **`transformers` must stay `<5`**. GroundingDINO relies on BERT helpers removed in transformers v5; `requirements.txt` pins `transformers>=4.40.0,<5.0.0`.
+- **Port already in use** — local `python webapp/app.py` defaults to port **5001**; override with `PORT=8765 python webapp/app.py`. Docker uses `ENV PORT=8080`.
+- **`git status` slow** — `.gitignore` excludes `.venv/`, caches, and checkpoint files. Vendored `webapp/GroundingDINO` and `webapp/MobileSAM` are plain source trees and do not need a nested `.git` for the app to work.
 
-1. Activate the project venv from the repo root, then start the app (default port **5001** for local runs; override if that is busy):
+## Running the web app
+
 ```bash
 source .venv/bin/activate
-cd webapp
-python app.py
-# or e.g. PORT=8765 python app.py
+python webapp/app.py           # serves on http://127.0.0.1:5001
+# or
+PORT=8765 python webapp/app.py
 ```
 
-2. Open the app in your browser, e.g. `http://127.0.0.1:5001` (or whatever port Flask prints). If you see “address already in use”, pick another: `PORT=8765 python app.py`.
+Open the printed URL, choose an image, type a prompt (e.g. `jollof rice`, `plantain`, `banku`), and submit. The UI renders the original and segmented images side-by-side and surfaces API errors inline.
 
-3. Upload an image and enter a prompt describing the food item you want to segment (e.g., "Banku", "Jollof Rice", "Tomato Stew")
+## API
 
-4. Click "Segment Food" to process the image
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/` | HTML upload UI (renders `webapp/templates/index.html`). |
+| `POST` | `/segment` | Run segmentation. `multipart/form-data` with fields `image_file` (PNG/JPG/JPEG/GIF/BMP, ≤10 MB) and `prompt` (non-empty string). |
+| `GET`  | `/health` | JSON health report. |
 
-5. View the results showing both the original image and the segmented object
+### `POST /segment` responses
 
-### Google Colab Notebook
+All responses use HTTP `200` with a JSON body. The `success` field signals outcome; validation/inference problems are reported inline rather than as HTTP errors.
 
-1. Open `Food_Segmentation.ipynb` in Google Colab
-2. Run the cells sequentially to:
-   - Set up the environment (automatic in Colab)
-   - Clone and install model repositories
-   - Download and load models
-   - Perform segmentation on sample images
-   - Analyze results
+Success:
 
-## API Endpoints (Web Application)
+```json
+{
+  "success": true,
+  "original_image": "<base64-encoded PNG>",
+  "result_image": "<base64-encoded PNG with mask overlay + bounding boxes>"
+}
+```
 
-- `GET /`: Main web interface
-- `POST /segment`: Process image segmentation (expects multipart form data with `image_file` and `prompt`)
-- `GET /health`: Health check endpoint for monitoring
-- `GET /static/<filename>`: Serve static files (images)
-- `GET /static/images/<filename>`: Serve processed images
+Failure (e.g. missing field, unsupported extension, model not loaded, no detection):
 
-## Model Information
+```json
+{ "success": false, "error": "Please provide a prompt." }
+```
 
-- **GroundingDINO**: Used for object detection based on text prompts
-  - Repository: https://github.com/IDEA-Research/GroundingDINO
-  - Detects objects in images based on natural language descriptions
-  - Automatically downloaded if not present
-- **MobileSAM**: Used for precise segmentation of detected objects
-  - Repository: https://github.com/ChaoningZhang/MobileSAM
-  - Lightweight version of SAM (Segment Anything Model) for mobile deployment
-- **MobileSAMv2**: Enhanced version with object-aware prompt sampling
-  - Available in the MobileSAM directory
-  - Faster segmentation with improved accuracy
-- Both models run on CPU by default (GPU support available if CUDA is installed)
+Truly unexpected errors return HTTP `500` with `{"success": false, "error": "An unexpected server error occurred."}`.
+
+### `GET /health` response
+
+```json
+{
+  "status": "healthy",
+  "models_loaded": { "grounding_dino": true, "sam_predictor": true },
+  "device": "cpu",
+  "sam_predictor_type": "SamPredictor",
+  "torch_available": true
+}
+```
+
+## Models
+
+- **GroundingDINO** (`webapp/GroundingDINO/`) — text-prompted object detection. Config: `GroundingDINO_SwinT_OGC.py`. Checkpoint: `groundingdino_swint_ogc.pth` (auto-downloaded).
+- **MobileSAM** (`webapp/MobileSAM/`) — lightweight SAM variant used for mask generation. Checkpoint: `weights/mobile_sam.pt` (auto-downloaded).
+- **MobileSAMv2** (`webapp/MobileSAM/MobileSAMv2/`) — enhanced variant included in the repo for experimentation (not wired into the Flask pipeline by default).
+
+Device selection is lazy (`model_loader.get_device_lazy()`): CUDA when available, otherwise CPU.
 
 ## Testing
 
-### Automated tests (pytest)
-
-From the repository root, install dev dependencies and run the fast suite (integration tests that load real models are excluded by default):
+Install dev dependencies and run the fast suite (integration tests that load real checkpoints are excluded by default via `addopts = -m 'not integration'` in `pyproject.toml`):
 
 ```bash
 pip install -r requirements-dev.txt
 pytest
 ```
 
-The first pytest run may take a while with little output while **PyTorch** and **OpenCV** load; that is expected on some setups.
+Expected: `12 passed, 1 deselected`. The first run can take a while while PyTorch and OpenCV import.
 
-- **Integration / full pipeline** (slow; needs checkpoints and may download weights):  
-  `RUN_MODEL_INTEGRATION=1 pytest -m integration`
-- **`git status` slow locally?** Ensure you are not scanning a huge untracked tree: the root [`.gitignore`](.gitignore) ignores `.venv/`, caches, and generated static paths. Vendored `webapp/GroundingDINO` and `webapp/MobileSAM` are plain source trees and do **not** need a nested `.git` folder for the app to work; update them by replacing the directory or using a pinned VCS dependency if you prefer not to vendor.
+Full integration pipeline (slow, loads real models):
 
-### Manual Testing
+```bash
+RUN_MODEL_INTEGRATION=1 pytest -m integration
+```
 
-1. Use the sample images in the `images/` directory (40+ food images available)
-2. Try different prompts to test segmentation accuracy
-3. Check the `Results/` directory for example outputs
+### Linting and formatting
+
+CI enforces both (`.github/workflows/ci.yml`):
+
+```bash
+ruff check webapp/ tests/
+ruff format --check webapp/ tests/
+```
+
+Configuration lives in `ruff.toml` (`target-version = "py311"`, `select = ["E", "F", "W", "I"]`, `line-length = 120`, with `webapp/GroundingDINO` and `webapp/MobileSAM` excluded).
 
 ## Results
 
-The project includes comprehensive testing results:
-- **Sample Results**: Check `Results/accurateresults/` for successful segmentations
-- **Analysis**: Review `Results/inaccuracies/` for cases where segmentation failed
-- **Data**: Detailed results in `Results/result.json` (7,000+ lines of analysis data)
-- **Generated Images**: Processed images in `webapp/static/GeneratedImages/`
-
-### Performance Metrics
-- Successfully tested on 40+ food images
-- Supports various food types: burgers, pizza, fruits, vegetables, etc.
-- Real-time processing with automatic error handling
+- `Results/accurateresults/` — examples of successful segmentations.
+- `Results/inaccuracies/` — cases where detection or masking failed.
+- `Results/result.json` — aggregated run data.
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+1. Fork and create a feature branch.
+2. Make your changes and keep `ruff check` + `ruff format --check` clean.
+3. Add or update tests in `tests/`.
+4. Open a pull request.
 
 ## License
 
 This project uses pre-trained models from:
+
 - GroundingDINO: https://github.com/IDEA-Research/GroundingDINO
 - MobileSAM: https://github.com/ChaoningZhang/MobileSAM
 
-Please refer to their respective licenses for model usage terms.
+Please refer to each upstream license for model usage terms.
 
-## Project Status
+## Project status
 
- **In Progress:**
+**In progress:**
+
 - Performance optimization for large images
 - Additional model fine-tuning options
-- Food Nutritional Content Analysis
+- Food nutritional content analysis
 
-**Note**: This project is designed for experimental purposes. The models are pre-trained and may not work perfectly on all types of food images. For production use, consider fine-tuning the models on your specific dataset.
+**Note:** this project is experimental. The models are pre-trained and may not generalize to every food image. For production use, consider fine-tuning on your target dataset.

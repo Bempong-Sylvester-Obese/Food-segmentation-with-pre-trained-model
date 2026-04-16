@@ -1,10 +1,12 @@
 """Pytest fixtures: put webapp on path and expose Flask test client."""
 
 from __future__ import annotations
+
 import sys
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import MagicMock
+
 import pytest
 from PIL import Image
 

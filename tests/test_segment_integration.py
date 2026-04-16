@@ -1,8 +1,10 @@
 """Optional full-stack segment test (requires weights + RUN_MODEL_INTEGRATION=1)."""
 
 from __future__ import annotations
+
 import os
 from io import BytesIO
+
 import pytest
 
 pytestmark = pytest.mark.integration

@@ -1,879 +1,399 @@
-from flask import Flask, request
+"""Flask entrypoint for the food segmentation webapp."""
+
+from __future__ import annotations
+
+import base64
+import gc
+import os
+import sys as _sys
+import time
+import traceback
+
 import cv2
 import numpy as np
-import traceback
-import gc
-import time
-import base64
-import os
+from flask import Flask, jsonify, render_template, request
+from werkzeug.exceptions import RequestEntityTooLarge
 
 try:
     import torch
+
     TORCH_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: PyTorch not available: {e}")
     TORCH_AVAILABLE = False
     torch = None
 
+import model_loader
+
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "bmp"}
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_IMAGE_DIM = 2048
+
+# Magic-byte signatures for the formats listed in ALLOWED_EXTENSIONS. Used as a
+# cheap content sniff so a renamed non-image cannot slip past the extension
+# check alone.
+_MAGIC_SIGNATURES: tuple[tuple[bytes, str], ...] = (
+    (b"\x89PNG\r\n\x1a\n", "png"),
+    (b"\xff\xd8\xff", "jpg"),
+    (b"GIF87a", "gif"),
+    (b"GIF89a", "gif"),
+    (b"BM", "bmp"),
+)
+
+
+def _sniff_image_format(data: bytes) -> str | None:
+    for sig, kind in _MAGIC_SIGNATURES:
+        if data.startswith(sig):
+            return kind
+    return None
+
+
+app = Flask(__name__)
+# Reject oversize uploads at the Werkzeug layer, before the whole body is
+# buffered into memory. `run_segmentation` still checks the same limit as a
+# defence in depth for callers that bypass Flask (e.g. direct function use).
+app.config["MAX_CONTENT_LENGTH"] = MAX_IMAGE_BYTES
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def _too_large(_e: RequestEntityTooLarge):
+    return (
+        jsonify({"success": False, "error": "Image exceeds 10 MB limit."}),
+        413,
+    )
+
+
+# Module-level handles. Kept here (not inside model_loader) so tests can
+# monkeypatch them directly on the `app` module.
 grounding_dino = None
 sam_predictor = None
 device = None
-models_loaded = False
 
-def load_models():
-    global grounding_dino, sam_predictor, device, models_loaded
-    
-    if models_loaded and grounding_dino is not None and sam_predictor is not None:
-        return True
-        
-    print("Loading models for first time...")
-    start_time = time.time()
-    
+
+def load_models() -> bool:
+    """Initialize both models and mirror their handles onto this module.
+
+    Safe to call repeatedly; `model_loader.initialize()` is itself idempotent.
+    Returns True only when both models loaded successfully.
+    """
+    global grounding_dino, sam_predictor, device
     try:
-        from model_loader import grounding_dino as gd, sam_predictor as sp, device as dev
-        grounding_dino = gd
-        sam_predictor = sp
-        device = dev
-        models_loaded = True
-        
-        load_time = time.time() - start_time
-        print(f"Models loaded successfully in {load_time:.2f} seconds")
-        
-        # Clear cache to free memory
-        if torch and torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        gc.collect()
-        
-        return True
-        
+        status = model_loader.initialize()
     except Exception as e:
-        print(f"Error loading models: {e}")
+        print(f"Failed to initialise models: {e}")
         traceback.print_exc()
         return False
 
-app = Flask(__name__)
+    grounding_dino = model_loader.grounding_dino_model
+    sam_predictor = model_loader.sam_predictor
+    try:
+        device = model_loader.get_device_lazy()
+    except Exception as e:
+        print(f"Failed to resolve device: {e}")
+        device = "cpu"
 
-# Load models on startup
-print("Initializing application...")
+    return all(status.values())
 
-# Main Inference Function
+
+def is_allowed_file(filename: str | None) -> bool:
+    if not filename or "." not in filename:
+        return False
+    return filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
 def run_segmentation(image_bytes: bytes, prompt: str):
+    """Run GroundingDINO + MobileSAM over `image_bytes` guided by `prompt`.
+
+    Returns ``(original_b64, result_b64)`` on success. Returns ``(None, None)``
+    for any validation or inference failure; callers decide how to surface that.
+
+    The entire body is wrapped in ``try/finally`` so CUDA caches and Python GC
+    are always released, even on validation shortcuts or inference errors.
+    """
     start_time = time.time()
-    
+
     try:
         if not image_bytes:
-            raise ValueError("No image data provided")
-        
+            print("run_segmentation: empty image bytes")
+            return None, None
         if not prompt or not prompt.strip():
-            raise ValueError("No prompt provided")
-        
-        # Check file size limit (10MB)
-        max_size = 10 * 1024 * 1024  # 10MB
-        if len(image_bytes) > max_size:
-            raise ValueError(f"Image file too large. Maximum size is {max_size // (1024*1024)}MB.")
-            
+            print("run_segmentation: empty prompt")
+            return None, None
+        if len(image_bytes) > MAX_IMAGE_BYTES:
+            print("run_segmentation: image exceeds max size")
+            return None, None
         if not TORCH_AVAILABLE or torch is None:
-            raise ValueError("PyTorch is not available. Please install PyTorch.")
-        
-        # Load models if not already loaded
-        if not load_models():
-            raise ValueError("Failed to load models. Check the server logs.")
-        
-        if grounding_dino is None:
-            raise ValueError("GroundingDINO model is not loaded. Check the server logs.")
-        
-        if sam_predictor is None:
-            raise ValueError("MobileSAM model is not loaded. Check the server logs.")
-        
-        # Convert image bytes to an OpenCV image
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        source_image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
+            print("run_segmentation: PyTorch not available")
+            return None, None
+
+        if grounding_dino is None or sam_predictor is None:
+            print("run_segmentation: models not loaded")
+            return None, None
+
+        try:
+            nparr = np.frombuffer(image_bytes, np.uint8)
+            source_image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        except Exception as e:
+            print(f"run_segmentation: cv2.imdecode failed: {e}")
+            return None, None
+
         if source_image is None:
-            raise ValueError("Invalid image format. Please upload a valid image file.")
-        
-        # Check image dimensions and resize if too large
+            print("run_segmentation: invalid image format")
+            return None, None
+
         height, width = source_image.shape[:2]
         if height == 0 or width == 0:
-            raise ValueError("Invalid image dimensions")
-        
-        # Resize image if too large (memory optimization)
-        max_dim = 2048  # Maximum dimension
-        if max(height, width) > max_dim:
-            scale = max_dim / max(height, width)
+            print("run_segmentation: invalid image dimensions")
+            return None, None
+
+        if max(height, width) > MAX_IMAGE_DIM:
+            scale = MAX_IMAGE_DIM / max(height, width)
             new_width = int(width * scale)
             new_height = int(height * scale)
             source_image = cv2.resize(source_image, (new_width, new_height), interpolation=cv2.INTER_AREA)
             height, width = source_image.shape[:2]
             print(f"Resized image to: {width}x{height}")
-            
-        print(f"Processing image with dimensions: {width}x{height}")
-        
-        # Detect with GroundingDINO
-        detections, phrases = grounding_dino.predict_with_caption(
-            image=source_image,
-            caption=prompt,
-            box_threshold=0.35,
-            text_threshold=0.25
-        )
 
-        # Check object detection
-        if detections is None or len(detections.xyxy) == 0:
-            print(f"No objects detected for prompt: '{prompt}'")
-            return None, None # No object detected
-
-        print(f"Detected {len(detections.xyxy)} objects with confidence scores: {detections.confidence}")
-
-        # Segment with MobileSAM
-        sam_predictor.set_image(source_image)
-        
-        # Convert detections to the correct format for SAM
-        current_device = device() if callable(device) else device
-        if TORCH_AVAILABLE and torch is not None:
-            input_boxes = torch.tensor(detections.xyxy, device=current_device)
-        else:
-            raise ValueError("PyTorch is not available for tensor operations")
-        
-        # Ensure boxes are in the correct format [x1, y1, x2, y2]
-        if input_boxes.dim() == 1:
-            input_boxes = input_boxes.unsqueeze(0)
-        
-        print(f"Input boxes shape: {input_boxes.shape}")
-        print(f"Input boxes: {input_boxes}")
+        print(f"Processing image: {width}x{height}")
 
         try:
-            masks, scores, logits = sam_predictor.predict(
+            detections, _phrases = grounding_dino.predict_with_caption(
+                image=source_image,
+                caption=prompt,
+                box_threshold=0.35,
+                text_threshold=0.25,
+            )
+        except Exception as e:
+            print(f"run_segmentation: GroundingDINO inference failed: {e}")
+            traceback.print_exc()
+            return None, None
+
+        if detections is None or len(detections.xyxy) == 0:
+            print(f"No objects detected for prompt: '{prompt}'")
+            return None, None
+
+        print(f"Detected {len(detections.xyxy)} objects, confidence: {detections.confidence}")
+
+        try:
+            current_device = device or model_loader.get_device_lazy()
+            sam_predictor.set_image(source_image)
+
+            input_boxes = torch.tensor(detections.xyxy, device=current_device)
+            if input_boxes.dim() == 1:
+                input_boxes = input_boxes.unsqueeze(0)
+        except Exception as e:
+            print(f"run_segmentation: SAM setup failed: {e}")
+            traceback.print_exc()
+            return None, None
+
+        binary_mask = None
+
+        # Preferred path: segment every detection in one forward pass so
+        # multi-object prompts ("rice, plantain") produce a combined mask.
+        try:
+            transformed_boxes = sam_predictor.transform.apply_boxes_torch(input_boxes, source_image.shape[:2])
+            masks, _scores, _ = sam_predictor.predict_torch(
                 point_coords=None,
                 point_labels=None,
-                box=input_boxes[0].cpu().numpy(),  # Use first box
+                boxes=transformed_boxes,
                 multimask_output=False,
             )
-            
-            if masks is None or len(masks) == 0:
-                print("No masks generated by MobileSAM")
-                return None, None
-                
-            # Binary mask
-            final_mask = masks[0]  # Use first mask
-            binary_mask = (final_mask > 0).astype(np.uint8) * 255
-            
-            print(f"Successfully generated mask with shape: {binary_mask.shape}")
-            print(f"Mask values range: {final_mask.min()} to {final_mask.max()}")
-            
+            if masks is not None and len(masks) > 0:
+                mask_np = masks.squeeze(1).detach().cpu().numpy()
+                combined = (mask_np > 0).any(axis=0)
+                binary_mask = combined.astype(np.uint8) * 255
+                print(f"Mask generated via predict_torch for {len(masks)} boxes, shape: {binary_mask.shape}")
         except Exception as e:
-            print(f"Error in MobileSAM prediction: {str(e)}")
-            # Alternative approach with point prompts
+            print(f"predict_torch SAM failed: {e}")
+
+        # Fallback for older SAM/MobileSAM builds without `predict_torch`: use
+        # the centre-point prompt on the first detection only.
+        if binary_mask is None:
             try:
-                print("Trying alternative approach with point prompts...")
+                print("Falling back to centre-point prompt ...")
                 box = detections.xyxy[0]
                 center_x = int((box[0] + box[2]) / 2)
                 center_y = int((box[1] + box[3]) / 2)
-                
-                masks, scores, logits = sam_predictor.predict(
+
+                masks, _scores, _ = sam_predictor.predict(
                     point_coords=np.array([[center_x, center_y]]),
-                    point_labels=np.array([1]),  # 1 for foreground point
+                    point_labels=np.array([1]),
                     multimask_output=False,
                 )
-                
                 if masks is not None and len(masks) > 0:
-                    final_mask = masks[0]
-                    binary_mask = (final_mask > 0).astype(np.uint8) * 255
-                    print(f"Successfully generated mask with point prompts, shape: {binary_mask.shape}")
-                else:
-                    print("No masks generated with point prompts")
-                    return None, None
-                    
-            except Exception as e2:
-                print(f"Error in alternative MobileSAM prediction: {str(e2)}")
-                return None, None
+                    binary_mask = (masks[0] > 0).astype(np.uint8) * 255
+                    print(f"Mask generated via point prompt, shape: {binary_mask.shape}")
+            except Exception as e:
+                print(f"Point-prompt SAM also failed: {e}")
 
-        result_image = source_image.copy()
-        
-        # Overlay for the segmentation mask
-        overlay = np.zeros_like(source_image)
-        overlay[binary_mask > 0] = [0, 255, 0]  # Green overlay for segmentation
-        
-        # Blend the overlay with the original image
-        alpha = 0.3  # Transparency factor
-        result_image = cv2.addWeighted(result_image, 1, overlay, alpha, 0)
-        
-        # Draw bounding boxes
-        for box in detections.xyxy:
-            x1, y1, x2, y2 = map(int, box)
-            cv2.rectangle(result_image, (x1, y1), (x2, y2), (0, 0, 255), 2)
-            label = f"{prompt}"
-            (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-            cv2.rectangle(result_image, (x1, y1 - text_height - 10), (x1 + text_width + 10, y1), (0, 0, 255), -1)
-            cv2.putText(result_image, label, (x1 + 5, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        if binary_mask is None:
+            print("run_segmentation: SAM could not generate a mask")
+            return None, None
 
-        # Convert images to base64 instead of saving to disk
-        _, original_buffer = cv2.imencode('.png', source_image)
-        _, result_buffer = cv2.imencode('.png', result_image)
-        
-        original_base64 = base64.b64encode(original_buffer).decode('utf-8')
-        result_base64 = base64.b64encode(result_buffer).decode('utf-8')
+        try:
+            result_image = source_image.copy()
+            overlay = np.zeros_like(source_image)
+            overlay[binary_mask > 0] = [0, 255, 0]
+            result_image = cv2.addWeighted(result_image, 1, overlay, 0.3, 0)
 
-        # Memory cleanup after inference
-        total_time = time.time() - start_time
-        print(f"Segmentation completed in {total_time:.2f} seconds")
-        
-        # Clear memory
-        if torch and torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        gc.collect()
-        
-        return original_base64, result_base64
-        
+            for raw_box in detections.xyxy:
+                x1, y1, x2, y2 = map(int, raw_box)
+                cv2.rectangle(result_image, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                label = prompt
+                (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+                cv2.rectangle(result_image, (x1, y1 - th - 10), (x1 + tw + 10, y1), (0, 0, 255), -1)
+                cv2.putText(
+                    result_image,
+                    label,
+                    (x1 + 5, y1 - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (255, 255, 255),
+                    2,
+                )
+
+            _, orig_buf = cv2.imencode(".png", source_image)
+            _, result_buf = cv2.imencode(".png", result_image)
+            original_b64 = base64.b64encode(orig_buf.tobytes()).decode("utf-8")
+            result_b64 = base64.b64encode(result_buf.tobytes()).decode("utf-8")
+        except Exception as e:
+            print(f"run_segmentation: post-processing failed: {e}")
+            traceback.print_exc()
+            return None, None
+
+        print(f"Segmentation completed in {time.time() - start_time:.2f}s")
+        return original_b64, result_b64
     except Exception as e:
-        print(f"Error in run_segmentation: {str(e)}")
-        # Memory cleanup
-        if torch and torch.cuda.is_available():
+        print(f"run_segmentation failed: {e}")
+        traceback.print_exc()
+        return None, None
+    finally:
+        if torch is not None and torch.cuda.is_available():
             torch.cuda.empty_cache()
         gc.collect()
-        return None, None
 
-# HTML for web interface
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Food Segmentation With GroundingDINO and MobileSAM</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
 
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #f8fafc;
-            min-height: 100vh;
-            color: #334155;
-            line-height: 1.6;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 40px 20px;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 50px;
-            color: #1e293b;
-        }
-
-        .header h1 {
-            font-size: 3rem;
-            font-weight: 700;
-            margin-bottom: 10px;
-        }
-
-        .header p {
-            font-size: 1.2rem;
-            color: #64748b;
-            font-weight: 400;
-        }
-
-        .main-card {
-            background: white;
-            border-radius: 12px;
-            padding: 40px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            border: 1px solid #e2e8f0;
-            margin-bottom: 30px;
-        }
-
-        .form-section {
-            margin-bottom: 40px;
-        }
-
-        .section-title {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: #334155;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .section-title i {
-            color: #475569;
-        }
-
-        .form-group {
-            margin-bottom: 25px;
-        }
-
-        .form-label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: #374151;
-            font-size: 0.95rem;
-        }
-
-        .file-upload-area {
-            border: 2px dashed #d1d5db;
-            border-radius: 12px;
-            padding: 40px 20px;
-            text-align: center;
-            transition: all 0.3s ease;
-            cursor: pointer;
-            background: #f9fafb;
-        }
-
-        .file-upload-area:hover {
-            border-color: #6b7280;
-            background: #f3f4f6;
-        }
-
-        .file-upload-area.dragover {
-            border-color: #4b5563;
-            background: #f3f4f6;
-        }
-
-        .file-upload-icon {
-            font-size: 3rem;
-            color: #9ca3af;
-            margin-bottom: 15px;
-        }
-
-        .file-upload-text {
-            color: #6b7280;
-            font-size: 1.1rem;
-            margin-bottom: 10px;
-        }
-
-        .file-upload-hint {
-            color: #9ca3af;
-            font-size: 0.9rem;
-        }
-
-        .file-input {
-            display: none;
-        }
-
-        .text-input {
-            width: 100%;
-            padding: 16px 20px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            background: white;
-        }
-
-        .text-input:focus {
-            outline: none;
-            border-color: #4b5563;
-            box-shadow: 0 0 0 3px rgba(75, 85, 99, 0.1);
-        }
-
-        .text-input::placeholder {
-            color: #9ca3af;
-        }
-
-        .submit-btn {
-            background: #374151;
-            color: white;
-            padding: 16px 32px;
-            border: none;
-            border-radius: 8px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            width: 100%;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .submit-btn:hover {
-            background: #4b5563;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        }
-
-        .submit-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .submit-btn i {
-            margin-right: 8px;
-        }
-
-        .loading-container {
-            text-align: center;
-            padding: 40px 20px;
-            display: none;
-        }
-
-        .loading-spinner {
-            width: 60px;
-            height: 60px;
-            border: 4px solid #f3f4f6;
-            border-top: 4px solid #4b5563;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .loading-text {
-            color: #374151;
-            font-size: 1.1rem;
-            font-weight: 500;
-        }
-
-        .error-container {
-            background: #fef2f2;
-            color: #dc2626;
-            padding: 16px 20px;
-            border-radius: 8px;
-            margin: 20px 0;
-            display: none;
-            border: 1px solid #fecaca;
-        }
-
-        .results-container {
-            margin-top: 40px;
-            display: none;
-        }
-
-        .results-header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        .results-title {
-            font-size: 2rem;
-            font-weight: 600;
-            color: #334155;
-            margin-bottom: 10px;
-        }
-
-        .results-subtitle {
-            color: #64748b;
-            font-size: 1.1rem;
-        }
-
-        .image-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-top: 30px;
-        }
-
-        .image-card {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            border: 1px solid #e5e7eb;
-            transition: transform 0.3s ease;
-        }
-
-        .image-card:hover {
-            transform: translateY(-2px);
-        }
-
-        .image-title {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: #334155;
-            margin-bottom: 15px;
-            text-align: center;
-        }
-
-        .image-wrapper {
-            position: relative;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            border: 1px solid #e5e7eb;
-        }
-
-        .image-wrapper img {
-            width: 100%;
-            height: auto;
-            display: block;
-            transition: transform 0.3s ease;
-        }
-
-        .image-wrapper:hover img {
-            transform: scale(1.02);
-        }
-
-        .success-animation {
-            animation: fadeInUp 0.6s ease-out;
-        }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .file-preview {
-            margin-top: 15px;
-            display: none;
-        }
-
-        .file-preview img {
-            max-width: 200px;
-            max-height: 150px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 20px 15px;
-            }
-
-            .header h1 {
-                font-size: 2rem;
-            }
-
-            .main-card {
-                padding: 25px 20px;
-            }
-
-            .image-grid {
-                grid-template-columns: 1fr;
-                gap: 20px;
-            }
-
-            .submit-btn {
-                padding: 14px 24px;
-                font-size: 1rem;
-            }
-        }
-
-        .pulse {
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>Food Segmentation With GroundingDINO and MobileSAM</h1>
-            <p>Upload an image and describe the food item to get precise segmentation result</p>
-        </div>
-
-        <div class="main-card">
-            <form id="upload-form" enctype="multipart/form-data">
-                <div class="form-section">
-                    <div class="section-title">
-                        Upload Image
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Select an image to upload</label>
-                        <div class="file-upload-area" id="file-upload-area">
-                            <div class="file-upload-icon">
-                            </div>
-                            <div class="file-upload-text">Click to upload or drag and drop</div>
-                            <div class="file-upload-hint">Supports: JPG, PNG, GIF, BMP (Max 10MB)</div>
-                            <input type="file" name="image_file" id="image_file" accept="image/*" class="file-input" required>
-                        </div>
-                        <div class="file-preview" id="file-preview"></div>
-                    </div>
-                </div>
-
-                <div class="form-section">
-                    <div class="section-title">
-                        Describe the Food
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Enter a food prompt</label>
-                        <input type="text" name="prompt" id="prompt" class="text-input" 
-                               placeholder="e.g., Waakye, Popcorn, Mango, Sliced Yam, Boiled Egg" required>
-                    </div>
-                </div>
-
-                <button type="submit" id="submit-btn" class="submit-btn">
-                    Segment Food
-                </button>
-            </form>
-
-            <div id="loading" class="loading-container">
-                <div class="loading-spinner"></div>
-                <div class="loading-text">Processing your image...</div>
-            </div>
-
-            <div id="error" class="error-container"></div>
-
-            <div id="results" class="results-container">
-                <div class="results-header">
-                    <div class="results-title">Segmentation Results</div>
-                    <div class="results-subtitle">Your food item has been successfully segmented</div>
-                </div>
-                
-                <div class="image-grid">
-                    <div class="image-card">
-                        <div class="image-title">Original Image</div>
-                        <div class="image-wrapper">
-                            <img id="original-image" src="" alt="Original">
-                        </div>
-                    </div>
-                    <div class="image-card">
-                        <div class="image-title">Segmentation Result</div>
-                        <div class="image-wrapper">
-                            <img id="result-image" src="" alt="Segmented">
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // File upload handling
-        const fileUploadArea = document.getElementById('file-upload-area');
-        const fileInput = document.getElementById('image_file');
-        const filePreview = document.getElementById('file-preview');
-
-        fileUploadArea.addEventListener('click', () => fileInput.click());
-        
-        fileUploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            fileUploadArea.classList.add('dragover');
-        });
-
-        fileUploadArea.addEventListener('dragleave', () => {
-            fileUploadArea.classList.remove('dragover');
-        });
-
-        fileUploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            fileUploadArea.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                fileInput.files = files;
-                handleFileSelect(files[0]);
-            }
-        });
-
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                handleFileSelect(e.target.files[0]);
-            }
-        });
-
-        function handleFileSelect(file) {
-            if (file && file.type.startsWith('image/')) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    filePreview.innerHTML = `<img src="${e.target.result}" alt="Preview">`;
-                    filePreview.style.display = 'block';
-                };
-                reader.readAsDataURL(file);
-            }
-        }
-
-        // Form submission
-        document.getElementById('upload-form').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            const loading = document.getElementById('loading');
-            const error = document.getElementById('error');
-            const results = document.getElementById('results');
-            const submitBtn = document.getElementById('submit-btn');
-            
-            // Validate inputs
-            const imageFile = document.getElementById('image_file').files[0];
-            const prompt = document.getElementById('prompt').value.trim();
-            
-            if (!imageFile) {
-                showError('Please select an image file.');
-                return;
-            }
-            
-            if (!prompt) {
-                showError('Please enter a prompt describing the food item.');
-                return;
-            }
-            
-            // Show loading
-            loading.style.display = 'block';
-            error.style.display = 'none';
-            results.style.display = 'none';
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
-            
-            try {
-                const response = await fetch('/segment', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    // Display base64 images
-                    document.getElementById('original-image').src = 'data:image/png;base64,' + result.original_image;
-                    document.getElementById('result-image').src = 'data:image/png;base64,' + result.result_image;
-                    
-                    // Show results with animation
-                    results.style.display = 'block';
-                    results.classList.add('success-animation');
-                    
-                    // Scroll to results
-                    results.scrollIntoView({ behavior: 'smooth' });
-                } else {
-                    showError(result.error || 'An error occurred during processing.');
-                }
-            } catch (err) {
-                console.error('Error:', err);
-                showError('An error occurred while processing the image. Please try again.');
-            } finally {
-                loading.style.display = 'none';
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fas fa-magic"></i> Segment Food';
-            }
-        });
-        
-        function showError(message) {
-            const error = document.getElementById('error');
-            error.textContent = message;
-            error.style.display = 'block';
-            error.scrollIntoView({ behavior: 'smooth' });
-        }
-
-        // Add some interactive effects
-        document.addEventListener('DOMContentLoaded', function() {
-            // Add pulse animation to submit button on page load
-            const submitBtn = document.getElementById('submit-btn');
-            submitBtn.classList.add('pulse');
-            
-            setTimeout(() => {
-                submitBtn.classList.remove('pulse');
-            }, 2000);
-        });
-    </script>
-</body>
-</html>
-"""
-
-# Web App Routes
-
-@app.route('/')
+@app.route("/")
 def index():
-    return HTML_TEMPLATE
+    return render_template("index.html")
 
-@app.route('/health')
+
+@app.route("/health")
 def health_check():
     try:
-        # Try to load models if not already loaded
-        if grounding_dino is None or sam_predictor is None:
-            try:
-                load_models()
-            except Exception as e:
-                return {
-                    'status': 'unhealthy',
-                    'error': f'Failed to load models: {str(e)}',
-                    'torch_available': TORCH_AVAILABLE
+        load_models()
+        return jsonify(
+            {
+                "status": "healthy",
+                "models_loaded": {
+                    "grounding_dino": grounding_dino is not None,
+                    "sam_predictor": sam_predictor is not None,
+                },
+                "device": str(device),
+                "sam_predictor_type": type(sam_predictor).__name__ if sam_predictor else None,
+                "torch_available": TORCH_AVAILABLE,
+            }
+        )
+    except Exception as e:
+        return (
+            jsonify(
+                {
+                    "status": "unhealthy",
+                    "error": str(e),
+                    "torch_available": TORCH_AVAILABLE,
                 }
-        
-        current_device = device() if callable(device) else device
-        return {
-            'status': 'healthy',
-            'models_loaded': {
-                'grounding_dino': grounding_dino is not None,
-                'sam_predictor': sam_predictor is not None
-            },
-            'device': str(current_device),
-            'sam_predictor_type': type(sam_predictor).__name__ if sam_predictor else None,
-            'torch_available': TORCH_AVAILABLE
-        }
-    except Exception as e:
-        return {
-            'status': 'unhealthy',
-            'error': str(e),
-            'torch_available': TORCH_AVAILABLE
-        }
+            ),
+            500,
+        )
 
-@app.route('/segment', methods=['POST'])
+
+@app.route("/segment", methods=["POST"])
 def segment():
-    try:
-        try:
-            load_models()
-        except Exception as e:
-            return {'success': False, 'error': f'Failed to load models: {str(e)}'}
-        
-        if grounding_dino is None:
-            return {'success': False, 'error': 'GroundingDINO model is not loaded. Check the server logs.'}
-        
-        if sam_predictor is None:
-            return {'success': False, 'error': 'MobileSAM model is not loaded. Check the server logs.'}
-        
-        if 'image_file' not in request.files:
-            return {'success': False, 'error': 'No image file provided.'}
-        
-        image_file = request.files['image_file']
-        prompt = request.form.get('prompt', '').strip()
-        
-        if not image_file or image_file.filename == '':
-            return {'success': False, 'error': 'Please select a valid image file.'}
-        
-        if not prompt:
-            return {'success': False, 'error': 'Please provide a prompt describing the food item.'}
-        
-        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
+    if not load_models():
+        return jsonify(
+            {
+                "success": False,
+                "error": "Models are not available. Check /health for details.",
+            }
+        )
 
-        filename =  image_file.filename
-        if not filename or '.' not in filename or \
-            filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
-            return {'success': False, 'error': 'Upload a valid image file (PNG, JPG, JPEG, GIF, BMP).'}
-        
-        # Run models
-        original_base64, result_base64 = run_segmentation(image_file.read(), prompt)
-        
-        return {
-            'success': True,
-            'original_image': original_base64,
-            'result_image': result_base64
-        }
-        
+    if "image_file" not in request.files:
+        return jsonify({"success": False, "error": "No image file provided."})
+
+    image_file = request.files["image_file"]
+    prompt = request.form.get("prompt", "").strip()
+
+    if not image_file or not image_file.filename:
+        return jsonify({"success": False, "error": "Please select a valid image file."})
+
+    if not is_allowed_file(image_file.filename):
+        return jsonify(
+            {
+                "success": False,
+                "error": "Upload a valid image file (PNG, JPG, JPEG, GIF, BMP).",
+            }
+        )
+
+    if not prompt:
+        return jsonify({"success": False, "error": "Please provide a prompt."})
+
+    image_bytes = image_file.read()
+    if not image_bytes:
+        return jsonify({"success": False, "error": "No image data provided."})
+
+    if _sniff_image_format(image_bytes) is None:
+        return jsonify(
+            {
+                "success": False,
+                "error": "File does not look like a valid image.",
+            }
+        )
+
+    try:
+        original_b64, result_b64 = run_segmentation(image_bytes, prompt)
     except Exception as e:
-        print(f"Error in segment route: {str(e)}")
-        return {'success': False, 'error': f'An error occurred during processing: {str(e)}'}
+        print(f"Unexpected error in /segment: {e}")
+        traceback.print_exc()
+        return (
+            jsonify({"success": False, "error": "An unexpected server error occurred."}),
+            500,
+        )
+
+    if original_b64 is None:
+        return jsonify(
+            {
+                "success": False,
+                "error": f"No '{prompt}' detected in the image. Try a different prompt or image.",
+            }
+        )
+
+    return jsonify(
+        {
+            "success": True,
+            "original_image": original_b64,
+            "result_image": result_b64,
+        }
+    )
+
+
+def _should_eager_load() -> bool:
+    """Eager-load only outside pytest so test runs stay fast and hermetic."""
+    if os.environ.get("SKIP_STARTUP_LOAD"):
+        return False
+    if "pytest" in _sys.modules or os.environ.get("PYTEST_CURRENT_TEST"):
+        return False
+    return True
+
+
+# Eager load at import time so `gunicorn --preload` warms the workers once,
+# rather than stalling the first HTTP request.
+if _should_eager_load():
+    try:
+        load_models()
+    except Exception as e:
+        print(f"Startup model load failed (will retry on first request): {e}")
+
 
 if __name__ == "__main__":
-    # Default 5001 for local runs — 8080 is often taken (proxies, other services).
-    # Override: PORT=8080 python app.py   or   export PORT=8765
     port = int(os.environ.get("PORT", "5001"))
-    app.run(debug=False, host='0.0.0.0', port=port)
+    app.run(debug=False, host="0.0.0.0", port=port)
