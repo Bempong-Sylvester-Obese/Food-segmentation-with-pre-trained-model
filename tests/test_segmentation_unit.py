@@ -1,6 +1,7 @@
 """Unit-level checks for run_segmentation validation (no checkpoints)."""
 
 from __future__ import annotations
+
 from unittest.mock import MagicMock
 
 

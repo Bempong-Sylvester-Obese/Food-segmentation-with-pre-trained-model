@@ -1,7 +1,9 @@
 """POST /segment validation and error JSON (models mocked)."""
 
 from __future__ import annotations
+
 from io import BytesIO
+
 
 def test_segment_missing_image_file(client, segment_mocks):
     response = client.post(
@@ -74,12 +76,13 @@ def test_segment_empty_file_body(client, segment_mocks):
     data = response.get_json()
     assert data["success"] is False
     error = data["error"].lower()
-    assert "no image data"in error or "image data" in error
+    assert "no image data" in error or "image data" in error
 
 
 def test_segment_success_when_run_segmentation_mocked(client, segment_mocks, tiny_png_bytes, monkeypatch):
-    import app as m
     import base64
+
+    import app as m
 
     fake_b64 = base64.b64encode(b"fake").decode("ascii")
 

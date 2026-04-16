@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 def test_index_returns_html(client):
     response = client.get("/")
     assert response.status_code == 200
