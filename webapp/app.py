@@ -360,10 +360,14 @@ def segment():
         )
 
     if original_b64 is None:
+        # run_segmentation returns (None, None) for many distinct failure modes
+        # (decode failure, GroundingDINO crash, SAM crash, post-processing, as
+        # well as "no detections"). Avoid the misleading "No '<prompt>'
+        # detected" phrasing and keep the message applicable to all of them.
         return jsonify(
             {
                 "success": False,
-                "error": f"No '{prompt}' detected in the image. Try a different prompt or image.",
+                "error": (f"Could not produce a segmentation for '{prompt}'. Try another image or prompt."),
             }
         )
 
