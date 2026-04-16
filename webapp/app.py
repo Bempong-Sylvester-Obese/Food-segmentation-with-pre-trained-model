@@ -210,8 +210,8 @@ def run_segmentation(image_bytes: bytes, prompt: str):
 
         _, orig_buf = cv2.imencode(".png", source_image)
         _, result_buf = cv2.imencode(".png", result_image)
-        original_b64 = base64.b64encode(orig_buf).decode("utf-8")
-        result_b64 = base64.b64encode(result_buf).decode("utf-8")
+        original_b64 = base64.b64encode(orig_buf.tobytes()).decode("utf-8")
+        result_b64 = base64.b64encode(result_buf.tobytes()).decode("utf-8")
     except Exception as e:
         print(f"run_segmentation: post-processing failed: {e}")
         traceback.print_exc()
