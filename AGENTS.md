@@ -23,7 +23,7 @@ rm -rf webapp/GroundingDINO/.git webapp/MobileSAM/.git
 ### Running the app
 
 ```bash
-source .venv/bin/activate
+source /workspace/.venv/bin/activate
 python webapp/app.py  # serves on http://127.0.0.1:5001
 ```
 
