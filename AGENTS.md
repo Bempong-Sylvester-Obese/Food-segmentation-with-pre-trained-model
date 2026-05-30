@@ -10,6 +10,8 @@ This is a **Flask web app** for prompt-guided food image segmentation using Grou
 
 Python **3.11** is required. The system default may be 3.12+; use `python3.11` explicitly or activate the venv at `/workspace/.venv`.
 
+On Ubuntu 24.04, `python3.11` is not in apt. Install via [uv](https://docs.astral.sh/uv/): `curl -LsSf https://astral.sh/uv/install.sh | sh`, then `uv python install 3.11` and ensure `$HOME/.local/bin` is on `PATH`.
+
 ### Vendored model directories
 
 `webapp/GroundingDINO/` and `webapp/MobileSAM/` must contain the upstream source trees (cloned from GitHub). They are installed as editable packages (`pip install -e ... --no-build-isolation`). If these directories are empty, clone them:
