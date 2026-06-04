@@ -35,6 +35,10 @@ README.md
 readme.md
 *.md
 
+# Notebooks / local experiments
+*.ipynb
+*.ipynb_checkpoints
+
 # Research files
 Research/
 

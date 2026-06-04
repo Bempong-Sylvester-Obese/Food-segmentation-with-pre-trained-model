@@ -17,9 +17,10 @@ Before running the code, skim the papers in `Research/` to understand what the m
 
 - Prompt-guided segmentation: upload an image, describe the target (e.g. `jollof rice`), get an overlay mask.
 - Flask web UI served from a Jinja template (`webapp/templates/index.html`).
-- JSON API: `POST /segment` returns base64-encoded original + result images.
-- Health endpoint (`/health`) reporting model-load state, device, and torch availability.
-- Automatic checkpoint download on first run (with connect/read timeouts and exponential backoff retries) into `webapp/GroundingDINO/` and `webapp/MobileSAM/weights/`.
+- JSON API: `POST /api/v1/segment` returns base64-encoded original + result images plus metadata; `/segment` remains for the browser UI.
+- Health endpoints: `/livez` for liveness, `/readyz` for model readiness, and `/health` for compatibility/status.
+- Security controls: optional API key enforcement, rate limiting, security headers, upload byte limits, image dimension validation, and checkpoint size/hash verification hooks.
+- Automatic checkpoint download on first run in development (with connect/read timeouts and exponential backoff retries) into `webapp/GroundingDINO/` and `webapp/MobileSAM/weights/`. Production Docker disables runtime downloads by default; mount verified checkpoints or bake them into your deployment image.
 - Gunicorn-ready: `load_models()` runs at import time under `--preload`, so the first request is not stuck waiting for PyTorch.
 - Docker: `Dockerfile` at the repo root runs on Python 3.11 and serves on port 8080.
 - CI: ruff lint + format checks and pytest on every push/PR (see `.github/workflows/ci.yml`).
@@ -41,7 +42,7 @@ Food-segmentation-with-pre-trained-model/
 │   ├── model_loader.py            # Imports + downloads + loads GroundingDINO & MobileSAM
 │   ├── templates/index.html       # Upload UI (rendered via render_template)
 │   ├── GroundingDINO/             # Vendored GroundingDINO (editable install target)
-│   └── MobileSAM/                 # Vendored MobileSAM + MobileSAMv2
+│   └── MobileSAM/                 # Vendored MobileSAM source
 ├── tests/
 │   ├── conftest.py                # Flask client + model mocks
 │   ├── test_routes.py             # /, /health
@@ -121,9 +122,9 @@ Open the printed URL, choose an image, type a prompt (e.g. `jollof rice`, `plant
 | `POST` | `/segment` | Run segmentation. `multipart/form-data` with fields `image_file` (PNG/JPG/JPEG/GIF/BMP, ≤10 MB) and `prompt` (non-empty string). |
 | `GET`  | `/health` | JSON health report. |
 
-### `POST /segment` responses
+### `POST /segment` and `POST /api/v1/segment` responses
 
-All responses use HTTP `200` with a JSON body. The `success` field signals outcome; validation/inference problems are reported inline rather than as HTTP errors.
+`/segment` keeps the browser-compatible contract where validation/inference problems return HTTP `200` with `success: false`. `/api/v1/segment` uses standard HTTP status codes (`400`, `401`, `413`, `429`, `422`, `503`, `500`) plus a machine-readable `code`.
 
 Success:
 
@@ -131,23 +132,32 @@ Success:
 {
   "success": true,
   "original_image": "<base64-encoded PNG>",
-  "result_image": "<base64-encoded PNG with mask overlay + bounding boxes>"
+  "result_image": "<base64-encoded PNG with mask overlay + bounding boxes>",
+  "metadata": {
+    "duration_ms": 1234.56,
+    "detections": {
+      "count": 2,
+      "boxes": [[0, 0, 10, 10]],
+      "confidence": [0.91],
+      "phrases": ["jollof rice"]
+    }
+  }
 }
 ```
 
 Failure (e.g. missing field, unsupported extension, model not loaded, no detection):
 
 ```json
-{ "success": false, "error": "Please provide a prompt." }
+{ "success": false, "code": "empty_prompt", "error": "Please provide a prompt." }
 ```
 
 Truly unexpected errors return HTTP `500` with `{"success": false, "error": "An unexpected server error occurred."}`.
 
-### `GET /health` response
+### Health and readiness
 
 ```json
 {
-  "status": "healthy",
+  "status": "ready",
   "models_loaded": { "grounding_dino": true, "sam_predictor": true },
   "device": "cpu",
   "sam_predictor_type": "SamPredictor",
@@ -159,8 +169,6 @@ Truly unexpected errors return HTTP `500` with `{"success": false, "error": "An 
 
 - **GroundingDINO** (`webapp/GroundingDINO/`) — text-prompted object detection. Config: `GroundingDINO_SwinT_OGC.py`. Checkpoint: `groundingdino_swint_ogc.pth` (auto-downloaded).
 - **MobileSAM** (`webapp/MobileSAM/`) — lightweight SAM variant used for mask generation. Checkpoint: `weights/mobile_sam.pt` (auto-downloaded).
-- **MobileSAMv2** (`webapp/MobileSAM/MobileSAMv2/`) — enhanced variant included in the repo for experimentation (not wired into the Flask pipeline by default).
-
 Device selection is lazy (`model_loader.get_device_lazy()`): CUDA when available, otherwise CPU.
 
 ## Testing
@@ -172,7 +180,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-Expected: `12 passed, 1 deselected`. The first run can take a while while PyTorch and OpenCV import.
+Expected: the fast suite passes with one integration test deselected. The first run can take a while while PyTorch and OpenCV import.
 
 Full integration pipeline (slow, loads real models):
 
@@ -218,7 +226,7 @@ Please refer to each upstream license for model usage terms.
 **In progress:**
 
 - Performance optimization for large images
-- Additional model fine-tuning options
-- Food nutritional content analysis
+- Optional artifact storage for generated outputs
+- Optional model-selection support for additional segmentation backends
 
 **Note:** this project is experimental. The models are pre-trained and may not generalize to every food image. For production use, consider fine-tuning on your target dataset.

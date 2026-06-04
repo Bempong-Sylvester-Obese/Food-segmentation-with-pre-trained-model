@@ -10,7 +10,7 @@ This repository implements **prompt-guided food segmentation** with **GroundingD
 | [`requirements-dev.txt`](requirements-dev.txt) | Dev tools: `pytest`, `ruff`, optional `pytest-cov`. |
 | [`Dockerfile`](Dockerfile) | Container: installs deps, editable installs for vendored models, gunicorn on port `8080`. |
 | [`Food_Segmentation.ipynb`](Food_Segmentation.ipynb) | Colab workflow (clones upstream repos into `/content/…` for standalone runs). |
-| [`webapp/app.py`](webapp/app.py) | Flask app: `/`, `/health`, `/segment`, inline HTML UI, `run_segmentation()`. |
+| [`webapp/app.py`](webapp/app.py) | Flask app: `/`, `/health`, `/livez`, `/readyz`, `/segment`, `/api/v1/segment`, and segmentation orchestration. |
 | [`webapp/model_loader.py`](webapp/model_loader.py) | Loads GroundingDINO + MobileSAM; paths under `webapp/GroundingDINO` and `webapp/MobileSAM`; auto-download checkpoints when missing. |
 | [`webapp/GroundingDINO/`](webapp/GroundingDINO/) | Vendored GroundingDINO sources (editable install target). |
 | [`webapp/MobileSAM/`](webapp/MobileSAM/) | Vendored MobileSAM sources (editable install target). |
