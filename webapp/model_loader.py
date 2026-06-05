@@ -53,6 +53,8 @@ class ModelState(str, Enum):
 _state = ModelState.NOT_LOADED
 _last_error: str | None = None
 _last_loaded_at: float | None = None
+_last_attempt_at: float | None = None
+INITIALIZE_RETRY_SECONDS = int(os.environ.get("INITIALIZE_RETRY_SECONDS", "60"))
 
 
 def _set_state(state: ModelState, error: str | None = None) -> None:
@@ -66,6 +68,7 @@ def get_status() -> dict[str, Any]:
         "state": _state.value,
         "last_error": _last_error,
         "last_loaded_at": _last_loaded_at,
+        "last_attempt_at": _last_attempt_at,
         "models_loaded": {
             "grounding_dino": grounding_dino_model is not None,
             "mobile_sam": sam_predictor is not None,
@@ -432,7 +435,7 @@ def initialize(force: bool = False) -> dict[str, bool]:
     Safe to call multiple times; subsequent calls are no-ops unless ``force=True``.
     Returns a status dict, e.g. ``{'grounding_dino': True, 'mobile_sam': False}``.
     """
-    global grounding_dino_model, sam_predictor, _initialized, _last_loaded_at
+    global _initialized, _last_attempt_at, _last_loaded_at, grounding_dino_model, sam_predictor
 
     with _init_lock:
         if _initialized and not force:
@@ -440,7 +443,18 @@ def initialize(force: bool = False) -> dict[str, bool]:
                 "grounding_dino": grounding_dino_model is not None,
                 "mobile_sam": sam_predictor is not None,
             }
+        if _state == ModelState.FAILED and _last_attempt_at is not None and not force:
+            import time
 
+            if time.time() - _last_attempt_at < INITIALIZE_RETRY_SECONDS:
+                return {
+                    "grounding_dino": grounding_dino_model is not None,
+                    "mobile_sam": sam_predictor is not None,
+                }
+
+        import time
+
+        _last_attempt_at = time.time()
         _set_state(ModelState.LOADING)
         logger.info("Starting model loading process")
 
@@ -466,18 +480,16 @@ def initialize(force: bool = False) -> dict[str, bool]:
             cp = MOBILE_SAM_DIR / "weights" / "mobile_sam.pt"
             sam_predictor = load_mobile_sam_model(cp)
 
-        _initialized = True
-
         status = {
             "grounding_dino": grounding_dino_model is not None,
             "mobile_sam": sam_predictor is not None,
         }
         if all(status.values()):
-            import time
-
+            _initialized = True
             _last_loaded_at = time.time()
             _set_state(ModelState.READY)
         else:
+            _initialized = False
             _set_state(ModelState.FAILED, f"Model loading incomplete: {status}")
 
         logger.info("Model loading summary")

@@ -27,6 +27,12 @@ coverage.xml
 # Virtual environments
 .venv/
 
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.cache/
+
 # OS
 .DS_Store
 
@@ -41,10 +47,18 @@ readme.md
 
 # Research files
 Research/
+MobileSAMv2/
 
 # Results
+Results/
 Results/inaccuracies/*.png
 Results/accurateresults/*.png
 
 # Food images
 Food images/
+
+# Local model artifacts
+*.pth
+*.pt
+*.safetensors
+webapp/MobileSAM/weights/

@@ -18,12 +18,21 @@ def test_health_json_when_models_stubbed(client, health_mocks):
     assert response.status_code == 200
     data = response.get_json()
     assert data is not None
-    assert data["status"] == "healthy"
+    assert data["status"] == "ready"
     assert "models_loaded" in data
     assert data["models_loaded"]["grounding_dino"] is True
     assert data["models_loaded"]["sam_predictor"] is True
     assert "device" in data
     assert "torch_available" in data
+
+
+def test_api_config_exposes_frontend_limits(client):
+    response = client.get("/api/v1/config")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["max_image_bytes"] > 0
+    assert "png" in data["allowed_extensions"]
+    assert data["max_prompt_chars"] > 0
 
 
 def test_livez_returns_alive(client):

@@ -13,13 +13,18 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from enum import Enum
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-import model_loader
-from flask import Flask, g, jsonify, render_template, request
+from flask import Flask, g, jsonify, render_template, request, send_from_directory
 from PIL import Image, UnidentifiedImageError
 from werkzeug.exceptions import RequestEntityTooLarge
+
+try:
+    from . import model_loader
+except ImportError:  # pragma: no cover - supports `python webapp/app.py`
+    import model_loader
 
 cv2: Any | None = None
 np: Any | None = None
@@ -29,6 +34,7 @@ ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "bmp"}
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_IMAGE_DIM = 2048
 MAX_IMAGE_PIXELS = int(os.environ.get("MAX_IMAGE_PIXELS", str(MAX_IMAGE_DIM * MAX_IMAGE_DIM)))
+MAX_PROMPT_CHARS = int(os.environ.get("MAX_PROMPT_CHARS", "200"))
 SEGMENT_RATE_LIMIT = os.environ.get("SEGMENT_RATE_LIMIT", "5/minute")
 SEGMENT_API_KEY = os.environ.get("SEGMENT_API_KEY", "")
 SECURITY_HEADERS_ENABLED = os.environ.get("SECURITY_HEADERS_ENABLED", "1").lower() not in {"0", "false", "no"}
@@ -39,6 +45,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
+FRONTEND_DIST = Path(__file__).resolve().parent / "static" / "frontend"
 
 
 def _get_cv2() -> Any:
@@ -81,6 +88,7 @@ def _sniff_image_format(data: bytes) -> str | None:
 class SegmentFailure(str, Enum):
     EMPTY_IMAGE = "empty_image"
     EMPTY_PROMPT = "empty_prompt"
+    PROMPT_TOO_LONG = "prompt_too_long"
     IMAGE_TOO_LARGE = "image_too_large"
     INVALID_IMAGE = "invalid_image"
     IMAGE_DIMENSIONS_TOO_LARGE = "image_dimensions_too_large"
@@ -116,6 +124,7 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_IMAGE_BYTES
 app.config["SEGMENT_API_KEY"] = SEGMENT_API_KEY
 app.config["SEGMENT_RATE_LIMIT"] = SEGMENT_RATE_LIMIT
 app.config["MAX_IMAGE_PIXELS"] = MAX_IMAGE_PIXELS
+app.config["MAX_PROMPT_CHARS"] = MAX_PROMPT_CHARS
 app.config["SECURITY_HEADERS_ENABLED"] = SECURITY_HEADERS_ENABLED
 
 
@@ -195,6 +204,14 @@ def validate_image_payload(image_bytes: bytes) -> str | None:
     except (UnidentifiedImageError, OSError, ValueError):
         return "File does not look like a valid image."
 
+    return None
+
+
+def validate_prompt(prompt: str) -> str | None:
+    if not prompt:
+        return "Please provide a prompt."
+    if len(prompt) > int(app.config.get("MAX_PROMPT_CHARS", MAX_PROMPT_CHARS)):
+        return f"Prompt must be {app.config.get('MAX_PROMPT_CHARS', MAX_PROMPT_CHARS)} characters or fewer."
     return None
 
 
@@ -494,6 +511,8 @@ def run_segmentation(image_bytes: bytes, prompt: str):
 
 @app.route("/")
 def index():
+    if (FRONTEND_DIST / "index.html").exists():
+        return send_from_directory(FRONTEND_DIST, "index.html")
     return render_template("index.html")
 
 
@@ -519,6 +538,21 @@ def api_model_status():
     return jsonify(_model_status_payload())
 
 
+@app.route("/api/v1/config")
+def api_config():
+    return jsonify(
+        {
+            "allowed_extensions": sorted(ALLOWED_EXTENSIONS),
+            "max_image_bytes": MAX_IMAGE_BYTES,
+            "max_image_dim": MAX_IMAGE_DIM,
+            "max_image_pixels": int(app.config.get("MAX_IMAGE_PIXELS", MAX_IMAGE_PIXELS)),
+            "max_prompt_chars": int(app.config.get("MAX_PROMPT_CHARS", MAX_PROMPT_CHARS)),
+            "rate_limit": app.config.get("SEGMENT_RATE_LIMIT", SEGMENT_RATE_LIMIT),
+            "api_key_required": bool(app.config.get("SEGMENT_API_KEY")),
+        }
+    )
+
+
 @app.route("/api/v1/health")
 def api_health():
     return livez()
@@ -528,6 +562,7 @@ def _status_for_reason(reason: SegmentFailure | None) -> int:
     return {
         SegmentFailure.EMPTY_IMAGE: 400,
         SegmentFailure.EMPTY_PROMPT: 400,
+        SegmentFailure.PROMPT_TOO_LONG: 400,
         SegmentFailure.IMAGE_TOO_LARGE: 413,
         SegmentFailure.INVALID_IMAGE: 400,
         SegmentFailure.IMAGE_DIMENSIONS_TOO_LARGE: 413,
@@ -581,12 +616,10 @@ def _segment_response(*, standard_status: bool):
             SegmentFailure.INVALID_IMAGE.value,
         )
 
-    if not prompt:
-        return _json_error(
-            "Please provide a prompt.",
-            400 if standard_status else 200,
-            SegmentFailure.EMPTY_PROMPT.value,
-        )
+    prompt_error = validate_prompt(prompt)
+    if prompt_error:
+        code = SegmentFailure.EMPTY_PROMPT.value if not prompt else SegmentFailure.PROMPT_TOO_LONG.value
+        return _json_error(prompt_error, 400 if standard_status else 200, code)
 
     image_bytes = image_file.read()
     if not image_bytes:

@@ -1,3 +1,13 @@
+FROM node:24-slim AS frontend-builder
+
+WORKDIR /app/frontend
+
+COPY frontend/package*.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run typecheck && npm run build
+
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -23,6 +33,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+COPY --from=frontend-builder /app/frontend/dist ./webapp/static/frontend
 
 RUN pip install --no-cache-dir -e webapp/GroundingDINO --no-build-isolation && \
     pip install --no-cache-dir -e webapp/MobileSAM --no-build-isolation
@@ -38,7 +49,7 @@ EXPOSE 8080
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8080/livez || exit 1
 
 CMD exec gunicorn --bind :$PORT --workers 1 --threads 2 --timeout 300 --max-requests 50 --max-requests-jitter 10 --preload --access-logfile - --error-logfile - webapp.app:app

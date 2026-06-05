@@ -86,10 +86,10 @@ def test_segment_success_when_run_segmentation_mocked(client, segment_mocks, tin
 
     fake_b64 = base64.b64encode(b"fake").decode("ascii")
 
-    def fake_run_segmentation(image_bytes, prompt):
-        return fake_b64, fake_b64
+    def fake_run_segmentation_detailed(image_bytes, prompt):
+        return m.SegmentationResult(success=True, original_image=fake_b64, result_image=fake_b64)
 
-    monkeypatch.setattr(m, "run_segmentation", fake_run_segmentation)
+    monkeypatch.setattr(m, "run_segmentation_detailed", fake_run_segmentation_detailed)
     response = client.post(
         "/segment",
         data={
@@ -207,10 +207,10 @@ def test_segment_rate_limiter_when_enabled(client, segment_mocks, tiny_png_bytes
         ),
     )
     client.application.config["RATELIMIT_ENABLED"] = True
-    client.application.config["SEGMENT_RATE_LIMIT"] = "1/minute"
+    client.application.config["SEGMENT_RATE_LIMIT"] = "2/minute"
     m._RATE_LIMIT_BUCKETS.clear()
 
-    for expected_status in (200, 200):
+    for _ in range(2):
         response = client.post(
             "/segment",
             data={
@@ -219,7 +219,18 @@ def test_segment_rate_limiter_when_enabled(client, segment_mocks, tiny_png_bytes
             },
             content_type="multipart/form-data",
         )
-        assert response.status_code == expected_status
+        assert response.status_code == 200
+        assert response.get_json()["success"] is True
+
+    response = client.post(
+        "/segment",
+        data={
+            "image_file": (BytesIO(tiny_png_bytes), "plate.png"),
+            "prompt": "jollof rice",
+        },
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
 
     data = response.get_json()
     assert data["success"] is False
