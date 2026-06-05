@@ -2,42 +2,104 @@
 
 from __future__ import annotations
 
+import hashlib
+import importlib
+import logging
 import os
 import sys
 import threading
-import traceback
 import warnings
+from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
-import torch
-
 warnings.filterwarnings("ignore", category=UserWarning)
+logger = logging.getLogger(__name__)
 
 ABS_PROJECT_DIR = Path(__file__).parent.parent.absolute()
+torch: Any | None = None
+_TORCH_IMPORT_ERROR: Exception | None = None
+_TORCH_LOCK = threading.Lock()
+
+
+def get_torch() -> Any | None:
+    """Import PyTorch lazily so Flask/test import does not stall on startup."""
+    global torch, _TORCH_IMPORT_ERROR
+    with _TORCH_LOCK:
+        if torch is not None:
+            return torch
+        if _TORCH_IMPORT_ERROR is not None:
+            return None
+        try:
+            torch = importlib.import_module("torch")
+        except Exception as e:
+            _TORCH_IMPORT_ERROR = e
+            logger.warning("PyTorch import failed: %s", e)
+            return None
+        return torch
+
+
+def torch_available() -> bool:
+    return get_torch() is not None
+
+
+class ModelState(str, Enum):
+    NOT_LOADED = "not_loaded"
+    LOADING = "loading"
+    READY = "ready"
+    FAILED = "failed"
+
+
+_state = ModelState.NOT_LOADED
+_last_error: str | None = None
+_last_loaded_at: float | None = None
+_last_attempt_at: float | None = None
+INITIALIZE_RETRY_SECONDS = int(os.environ.get("INITIALIZE_RETRY_SECONDS", "60"))
+
+
+def _set_state(state: ModelState, error: str | None = None) -> None:
+    global _state, _last_error
+    _state = state
+    _last_error = error
+
+
+def get_status() -> dict[str, Any]:
+    return {
+        "state": _state.value,
+        "last_error": _last_error,
+        "last_loaded_at": _last_loaded_at,
+        "last_attempt_at": _last_attempt_at,
+        "models_loaded": {
+            "grounding_dino": grounding_dino_model is not None,
+            "mobile_sam": sam_predictor is not None,
+        },
+    }
 
 
 # ------------------------------------------------------------------ #
 # Device                                                               #
 # ------------------------------------------------------------------ #
-def get_device() -> torch.device:
+def get_device() -> Any:
+    torch_module = get_torch()
+    if torch_module is None:
+        raise RuntimeError("PyTorch is not available")
     try:
-        return torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        return torch_module.device("cuda") if torch_module.cuda.is_available() else torch_module.device("cpu")
     except Exception as e:
-        print(f"Warning: Could not initialize CUDA, falling back to CPU: {e}")
-        return torch.device("cpu")
+        logger.warning("Could not initialize CUDA, falling back to CPU: %s", e)
+        return torch_module.device("cpu")
 
 
-_DEVICE: Optional[torch.device] = None
+_DEVICE: Optional[Any] = None
 _DEVICE_LOCK = threading.Lock()
 
 
-def get_device_lazy() -> torch.device:
+def get_device_lazy() -> Any:
     global _DEVICE
     with _DEVICE_LOCK:
         if _DEVICE is None:
             _DEVICE = get_device()
-            print(f"Initialized device: {_DEVICE}")
+            logger.info("Initialized device: %s", _DEVICE)
     return _DEVICE
 
 
@@ -52,7 +114,7 @@ try:
     MOBILE_SAM_DIR.mkdir(parents=True, exist_ok=True)
     (MOBILE_SAM_DIR / "weights").mkdir(parents=True, exist_ok=True)
 except Exception as e:
-    print(f"Warning: Could not create directories: {e}")
+    logger.warning("Could not create directories: %s", e)
 
 
 # ------------------------------------------------------------------ #
@@ -75,7 +137,6 @@ _init_lock = threading.Lock()
 def safe_import(
     module_name: str,
     from_list: Optional[list] = None,
-    as_name: Optional[str] = None,
 ) -> Any:
     try:
         if from_list:
@@ -85,16 +146,16 @@ def safe_import(
             return tuple(getattr(module, item) for item in from_list)
         return __import__(module_name)
     except ImportError as e:
-        print(f"Import failed for {module_name}: {e}")
+        logger.warning("Import failed for %s: %s", module_name, e)
     except Exception as e:
-        print(f"Unexpected error importing {module_name}: {e}")
+        logger.warning("Unexpected error importing %s: %s", module_name, e)
     return None
 
 
 def add_to_path_if_exists(directory: Path) -> bool:
     if directory.exists() and str(directory) not in sys.path:
         sys.path.insert(0, str(directory))
-        print(f"Added {directory} to sys.path")
+        logger.info("Added %s to sys.path", directory)
         return True
     return False
 
@@ -104,11 +165,11 @@ def add_to_path_if_exists(directory: Path) -> bool:
 # ------------------------------------------------------------------ #
 def import_grounding_dino() -> bool:
     global GroundingDINO
-    print("Attempting to import GroundingDINO...")
+    logger.info("Attempting to import GroundingDINO")
 
     GroundingDINO = safe_import("groundingdino.util.inference", ["Model"])
     if GroundingDINO:
-        print("Successfully imported GroundingDINO (standard method)")
+        logger.info("Successfully imported GroundingDINO (standard method)")
         return True
 
     for pkg in ["groundingdino", "GroundingDINO", "grounding_dino"]:
@@ -117,7 +178,7 @@ def import_grounding_dino() -> bool:
                 result = safe_import(f"{pkg}.util.inference", ["Model"])
                 if result:
                     GroundingDINO = result
-                    print(f"Successfully imported GroundingDINO (package: {pkg})")
+                    logger.info("Successfully imported GroundingDINO (package: %s)", pkg)
                     return True
         except Exception:
             continue
@@ -128,23 +189,23 @@ def import_grounding_dino() -> bool:
                 result = safe_import("groundingdino.util.inference", ["Model"])
                 if result:
                     GroundingDINO = result
-                    print(f"Successfully imported GroundingDINO from {path}")
+                    logger.info("Successfully imported GroundingDINO from %s", path)
                     return True
 
-    print("All GroundingDINO import methods failed")
+    logger.error("All GroundingDINO import methods failed")
     _print_grounding_dino_help()
     return False
 
 
 def import_mobile_sam() -> bool:
     global sam_model_registry, SamPredictor
-    print("Attempting to import MobileSAM...")
+    logger.info("Attempting to import MobileSAM")
 
     for pkg in ["mobile_sam", "segment_anything"]:
         result = safe_import(pkg, ["sam_model_registry", "SamPredictor"])
         if result and len(result) == 2:
             sam_model_registry, SamPredictor = result
-            print(f"Successfully imported MobileSAM (package: {pkg})")
+            logger.info("Successfully imported MobileSAM (package: %s)", pkg)
             return True
 
     if MOBILE_SAM_DIR.exists():
@@ -152,10 +213,10 @@ def import_mobile_sam() -> bool:
         result = safe_import("mobile_sam", ["sam_model_registry", "SamPredictor"])
         if result and len(result) == 2:
             sam_model_registry, SamPredictor = result
-            print("Successfully imported MobileSAM from local directory")
+            logger.info("Successfully imported MobileSAM from local directory")
             return True
 
-    print("All MobileSAM import methods failed")
+    logger.error("All MobileSAM import methods failed")
     _print_mobile_sam_help()
     return False
 
@@ -164,17 +225,17 @@ def import_mobile_sam() -> bool:
 # Install helpers                                                      #
 # ------------------------------------------------------------------ #
 def _print_grounding_dino_help():
-    print("\nGROUNDINGDINO INSTALLATION REQUIRED:")
-    print("  pip install groundingdino-py")
-    print("  or")
-    print("  pip install 'git+https://github.com/IDEA-Research/GroundingDINO.git'")
+    logger.error(
+        "GROUNDINGDINO INSTALLATION REQUIRED: pip install groundingdino-py "
+        "or pip install 'git+https://github.com/IDEA-Research/GroundingDINO.git'"
+    )
 
 
 def _print_mobile_sam_help():
-    print("\nMOBILESAM INSTALLATION REQUIRED:")
-    print("  pip install mobile-sam")
-    print("  or")
-    print("  pip install 'git+https://github.com/ChaoningZhang/MobileSAM.git'")
+    logger.error(
+        "MOBILESAM INSTALLATION REQUIRED: pip install mobile-sam "
+        "or pip install 'git+https://github.com/ChaoningZhang/MobileSAM.git'"
+    )
 
 
 # ------------------------------------------------------------------ #
@@ -182,6 +243,38 @@ def _print_mobile_sam_help():
 # ------------------------------------------------------------------ #
 CONNECT_TIMEOUT = 10
 READ_TIMEOUT = 120
+ALLOW_MODEL_DOWNLOADS = os.environ.get("ALLOW_MODEL_DOWNLOADS", "1").lower() not in {"0", "false", "no"}
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _checkpoint_valid(
+    path: Path,
+    description: str,
+    expected_sha256: str | None = None,
+    min_bytes: int = 1,
+) -> bool:
+    if not path.exists() or path.stat().st_size <= 0:
+        return False
+
+    size = path.stat().st_size
+    if size < min_bytes:
+        logger.error("%s at %s is too small (%s bytes, expected at least %s)", description, path, size, min_bytes)
+        return False
+
+    if expected_sha256:
+        actual_sha256 = _sha256_file(path)
+        if actual_sha256.lower() != expected_sha256.lower():
+            logger.error("%s hash mismatch at %s", description, path)
+            return False
+
+    return True
 
 
 def download_file_robust(
@@ -189,13 +282,22 @@ def download_file_robust(
     destination: Path,
     description: str,
     max_retries: int = 3,
+    expected_sha256: str | None = None,
+    min_bytes: int = 1,
 ) -> bool:
-    if destination.exists() and destination.stat().st_size > 0:
-        print(f"{description} already exists at {destination}")
+    if _checkpoint_valid(destination, description, expected_sha256, min_bytes):
+        logger.info("%s already exists at %s", description, destination)
         return True
+    if destination.exists():
+        logger.warning("%s exists but failed validation; it will be replaced", description)
 
-    print(f"Downloading {description} ...")
+    if not ALLOW_MODEL_DOWNLOADS:
+        logger.error("%s missing or invalid and ALLOW_MODEL_DOWNLOADS is disabled", description)
+        return False
+
+    logger.info("Downloading %s", description)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    tmp_destination = destination.with_suffix(destination.suffix + ".tmp")
 
     import requests
 
@@ -211,36 +313,43 @@ def download_file_robust(
             total = int(response.headers.get("content-length", 0))
             received = 0
 
-            with open(destination, "wb") as f:
+            with open(tmp_destination, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
                         received += len(chunk)
                         if total:
                             pct = received / total * 100
-                            print(f"\r  {description}: {pct:.1f}%", end="", flush=True)
+                            logger.info("%s download progress: %.1f%%", description, pct)
 
-            print()
-            print(f"{description} downloaded successfully ({received:,} bytes)")
+            if not _checkpoint_valid(tmp_destination, description, expected_sha256, min_bytes):
+                tmp_destination.unlink(missing_ok=True)
+                logger.error("%s downloaded but failed validation", description)
+                return False
+
+            os.replace(tmp_destination, destination)
+            logger.info("%s downloaded successfully (%s bytes)", description, f"{received:,}")
             return True
 
         except requests.exceptions.ConnectTimeout:
-            print(f"\nAttempt {attempt}/{max_retries}: connection timed out for {url}")
+            logger.warning("Attempt %s/%s: connection timed out for %s", attempt, max_retries, url)
         except requests.exceptions.ReadTimeout:
-            print(f"\nAttempt {attempt}/{max_retries}: read timed out for {url}")
+            logger.warning("Attempt %s/%s: read timed out for %s", attempt, max_retries, url)
         except requests.exceptions.RequestException as e:
-            print(f"\nAttempt {attempt}/{max_retries}: download failed - {e}")
+            logger.warning("Attempt %s/%s: download failed - %s", attempt, max_retries, e)
         except Exception as e:
-            print(f"\nAttempt {attempt}/{max_retries}: unexpected error - {e}")
+            logger.warning("Attempt %s/%s: unexpected error - %s", attempt, max_retries, e)
+        finally:
+            tmp_destination.unlink(missing_ok=True)
 
         if attempt < max_retries:
             import time
 
             wait = 2**attempt
-            print(f"Retrying in {wait}s ...")
+            logger.info("Retrying in %ss", wait)
             time.sleep(wait)
 
-    print(f"All {max_retries} download attempts failed for {description}")
+    logger.error("All %s download attempts failed for %s", max_retries, description)
     return False
 
 
@@ -252,25 +361,37 @@ def find_config_file() -> Optional[Path]:
 
 
 def setup_grounding_dino_files() -> tuple[bool, Optional[Path]]:
-    print("Setting up GroundingDINO files...")
+    logger.info("Setting up GroundingDINO files")
     checkpoint_url = "https://huggingface.co/ShilongLiu/GroundingDINO/resolve/main/groundingdino_swint_ogc.pth"
     checkpoint_path = GROUNDING_DINO_DIR / "groundingdino_swint_ogc.pth"
 
-    checkpoint_ready = download_file_robust(checkpoint_url, checkpoint_path, "GroundingDINO checkpoint")
+    checkpoint_ready = download_file_robust(
+        checkpoint_url,
+        checkpoint_path,
+        "GroundingDINO checkpoint",
+        expected_sha256=os.environ.get("GROUNDING_DINO_SHA256"),
+        min_bytes=int(os.environ.get("GROUNDING_DINO_MIN_BYTES", str(100 * 1024 * 1024))),
+    )
     config_path = find_config_file()
 
     if not config_path:
-        print("Config file not found. Please install the GroundingDINO repo correctly.")
+        logger.error("Config file not found. Please install the GroundingDINO repo correctly.")
         return False, None
 
     return checkpoint_ready, config_path
 
 
 def setup_mobile_sam_files() -> bool:
-    print("Setting up MobileSAM files...")
+    logger.info("Setting up MobileSAM files")
     url = "https://github.com/ChaoningZhang/MobileSAM/raw/master/weights/mobile_sam.pt"
     checkpoint_path = MOBILE_SAM_DIR / "weights" / "mobile_sam.pt"
-    return download_file_robust(url, checkpoint_path, "MobileSAM checkpoint")
+    return download_file_robust(
+        url,
+        checkpoint_path,
+        "MobileSAM checkpoint",
+        expected_sha256=os.environ.get("MOBILE_SAM_SHA256"),
+        min_bytes=int(os.environ.get("MOBILE_SAM_MIN_BYTES", str(10 * 1024 * 1024))),
+    )
 
 
 # ------------------------------------------------------------------ #
@@ -278,23 +399,22 @@ def setup_mobile_sam_files() -> bool:
 # ------------------------------------------------------------------ #
 def load_grounding_dino_model(config_path: Path, checkpoint_path: Path) -> Optional[Any]:
     if not GroundingDINO:
-        print("GroundingDINO class not available")
+        logger.error("GroundingDINO class not available")
         return None
     try:
-        print("Loading GroundingDINO model...")
+        logger.info("Loading GroundingDINO model")
         device = get_device_lazy()
         model = GroundingDINO(str(config_path), str(checkpoint_path), device)
-        print("GroundingDINO loaded successfully")
+        logger.info("GroundingDINO loaded successfully")
         return model
     except Exception as e:
-        print(f"Error loading GroundingDINO: {e}")
-        traceback.print_exc()
+        logger.exception("Error loading GroundingDINO: %s", e)
         return None
 
 
 def load_mobile_sam_model(checkpoint_path: Path, sam_type: str = "vit_t") -> Optional[Any]:
     if not sam_model_registry or not SamPredictor:
-        print("MobileSAM components not available")
+        logger.error("MobileSAM components not available")
         return None
     try:
         device = get_device_lazy()
@@ -302,7 +422,7 @@ def load_mobile_sam_model(checkpoint_path: Path, sam_type: str = "vit_t") -> Opt
         sam.to(device)
         return SamPredictor(sam)
     except Exception as e:
-        print(f"Error loading MobileSAM: {e}")
+        logger.exception("Error loading MobileSAM: %s", e)
         return None
 
 
@@ -315,7 +435,7 @@ def initialize(force: bool = False) -> dict[str, bool]:
     Safe to call multiple times; subsequent calls are no-ops unless ``force=True``.
     Returns a status dict, e.g. ``{'grounding_dino': True, 'mobile_sam': False}``.
     """
-    global grounding_dino_model, sam_predictor, _initialized
+    global _initialized, _last_attempt_at, _last_loaded_at, grounding_dino_model, sam_predictor
 
     with _init_lock:
         if _initialized and not force:
@@ -323,14 +443,26 @@ def initialize(force: bool = False) -> dict[str, bool]:
                 "grounding_dino": grounding_dino_model is not None,
                 "mobile_sam": sam_predictor is not None,
             }
+        if _state == ModelState.FAILED and _last_attempt_at is not None and not force:
+            import time
 
-        print("\n=== Starting model loading process ===")
+            if time.time() - _last_attempt_at < INITIALIZE_RETRY_SECONDS:
+                return {
+                    "grounding_dino": grounding_dino_model is not None,
+                    "mobile_sam": sam_predictor is not None,
+                }
 
-        print("\n--- Importing model libraries ---")
+        import time
+
+        _last_attempt_at = time.time()
+        _set_state(ModelState.LOADING)
+        logger.info("Starting model loading process")
+
+        logger.info("Importing model libraries")
         gd_available = import_grounding_dino()
         sam_available = import_mobile_sam()
 
-        print("\n--- Setting up model files ---")
+        logger.info("Setting up model files")
         gd_files_ready, gd_config_path = False, None
         sam_files_ready = False
 
@@ -339,7 +471,7 @@ def initialize(force: bool = False) -> dict[str, bool]:
         if sam_available:
             sam_files_ready = setup_mobile_sam_files()
 
-        print("\n--- Loading models ---")
+        logger.info("Loading models")
         if gd_available and gd_files_ready and gd_config_path:
             cp = GROUNDING_DINO_DIR / "groundingdino_swint_ogc.pth"
             grounding_dino_model = load_grounding_dino_model(gd_config_path, cp)
@@ -348,15 +480,21 @@ def initialize(force: bool = False) -> dict[str, bool]:
             cp = MOBILE_SAM_DIR / "weights" / "mobile_sam.pt"
             sam_predictor = load_mobile_sam_model(cp)
 
-        _initialized = True
-
         status = {
             "grounding_dino": grounding_dino_model is not None,
             "mobile_sam": sam_predictor is not None,
         }
-        print("\n=== Model loading summary ===")
+        if all(status.values()):
+            _initialized = True
+            _last_loaded_at = time.time()
+            _set_state(ModelState.READY)
+        else:
+            _initialized = False
+            _set_state(ModelState.FAILED, f"Model loading incomplete: {status}")
+
+        logger.info("Model loading summary")
         for name, ok in status.items():
-            print(f"  {name}: {'Loaded' if ok else 'Failed'}")
+            logger.info("%s: %s", name, "Loaded" if ok else "Failed")
 
         return status
 

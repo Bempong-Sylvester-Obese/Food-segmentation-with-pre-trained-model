@@ -20,7 +20,14 @@ if str(WEBAPP) not in sys.path:
 def app():
     import app as flask_app
 
-    flask_app.app.config.update(TESTING=True)
+    flask_app.app.config.update(
+        TESTING=True,
+        SEGMENT_API_KEY="",
+        RATELIMIT_ENABLED=False,
+        SEGMENT_RATE_LIMIT="5/minute",
+        MAX_IMAGE_PIXELS=flask_app.MAX_IMAGE_PIXELS,
+    )
+    flask_app._RATE_LIMIT_BUCKETS.clear()
     return flask_app.app
 
 

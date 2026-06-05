@@ -1,6 +1,6 @@
 # Food segmentation — Cursor / agent orientation
 
-This repository implements **prompt-guided food segmentation** with **GroundingDINO** (text-conditioned detection) and **MobileSAM** (segmentation). The main product surface is a **Flask** app under `webapp/`; there is also a **Colab** notebook for experimentation.
+This repository implements **prompt-guided food segmentation** with **GroundingDINO** (text-conditioned detection) and **MobileSAM** (segmentation). The product surface is a **React/Vite** app under `frontend/`; `webapp/` is the Flask API/model service and also serves built frontend assets in production. There is also a **Colab** notebook for experimentation.
 
 ## Directory map
 
@@ -8,9 +8,10 @@ This repository implements **prompt-guided food segmentation** with **GroundingD
 |------|------|
 | [`requirements.txt`](requirements.txt) | Production/runtime Python deps (Docker + local). |
 | [`requirements-dev.txt`](requirements-dev.txt) | Dev tools: `pytest`, `ruff`, optional `pytest-cov`. |
-| [`Dockerfile`](Dockerfile) | Container: installs deps, editable installs for vendored models, gunicorn on port `8080`. |
+| [`frontend/`](frontend/) | React/Vite TypeScript UI with upload workspace, API client, and result viewer. |
+| [`Dockerfile`](Dockerfile) | Container: builds frontend assets in a Node stage, installs Python deps, serves Flask/Gunicorn on port `8080`. |
 | [`Food_Segmentation.ipynb`](Food_Segmentation.ipynb) | Colab workflow (clones upstream repos into `/content/…` for standalone runs). |
-| [`webapp/app.py`](webapp/app.py) | Flask app: `/`, `/health`, `/segment`, inline HTML UI, `run_segmentation()`. |
+| [`webapp/app.py`](webapp/app.py) | Flask app: `/`, `/health`, `/livez`, `/readyz`, `/api/v1/config`, `/api/v1/models/status`, `/segment`, `/api/v1/segment`, and segmentation orchestration. |
 | [`webapp/model_loader.py`](webapp/model_loader.py) | Loads GroundingDINO + MobileSAM; paths under `webapp/GroundingDINO` and `webapp/MobileSAM`; auto-download checkpoints when missing. |
 | [`webapp/GroundingDINO/`](webapp/GroundingDINO/) | Vendored GroundingDINO sources (editable install target). |
 | [`webapp/MobileSAM/`](webapp/MobileSAM/) | Vendored MobileSAM sources (editable install target). |
@@ -27,10 +28,10 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 pip install -e webapp/GroundingDINO --no-build-isolation
 pip install -e webapp/MobileSAM --no-build-isolation
-cd webapp && python app.py
+python webapp/app.py
 ```
 
-Default port **5001** (override with `PORT=8080`). Docker uses **8080** inside the container.
+Default backend port **5001** (override with `PORT=8080`). For frontend development, run `cd frontend && npm run dev`; Vite proxies API calls to Flask on port 5001. Docker uses **8080** inside the container and serves built frontend assets from Flask.
 
 **Tests:**
 
@@ -46,6 +47,8 @@ The first run can pause with **no output for a long time** while **PyTorch** and
 - **`transformers` must stay &lt; 5** (see README). GroundingDINO relies on APIs removed in v5.
 - **Editable installs** for vendored code: use `--no-build-isolation` for GroundingDINO so the build sees your installed PyTorch.
 - **Weights**: `.pth` / `.pt` are gitignored; first run may download into `webapp/GroundingDINO/` and `webapp/MobileSAM/weights/` per `model_loader.py`.
+- **Production downloads**: Docker sets `ALLOW_MODEL_DOWNLOADS=0`; mount or bake verified checkpoints for readiness.
+- **Frontend assets**: `frontend/dist` is ignored by Docker context; Docker rebuilds it and copies the output to `webapp/static/frontend`.
 
 ## Git / repo hygiene
 

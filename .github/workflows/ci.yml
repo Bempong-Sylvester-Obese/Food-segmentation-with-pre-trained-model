@@ -58,3 +58,86 @@ jobs:
         run: pytest --cov=webapp --cov-report=term-missing
         # integration tests are excluded via addopts in pyproject.toml
         # to run them locally: pytest -m integration
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Dependency vulnerability audit
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit
+          pip-audit -r requirements.txt
+
+  markdown:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DavidAnson/markdownlint-cli2-action@v17
+        with:
+          globs: |
+            README.md
+            readme.md
+            cursor.md
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker build smoke
+        run: docker build -t food-segmentation-smoke .
+
+      - name: Docker run smoke
+        run: |
+          docker run -d --rm --name food-segmentation-smoke -e SKIP_STARTUP_LOAD=1 -p 8080:8080 food-segmentation-smoke
+          for i in {1..30}; do
+            if curl -fsS http://localhost:8080/livez; then
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8080/
+          curl -fsS http://localhost:8080/api/v1/config
+          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/readyz)
+          test "$status" = "503"
+          docker stop food-segmentation-smoke

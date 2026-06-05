@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from io import BytesIO
 from unittest.mock import MagicMock
+
+import numpy as np
+from PIL import Image
 
 
 def test_run_segmentation_rejects_empty_bytes(monkeypatch):
@@ -70,3 +74,40 @@ def test_run_segmentation_cleans_up_on_failure(monkeypatch):
     gc_spy.assert_called()
     if m.torch is not None:
         cuda_spy.assert_called()
+
+
+def test_run_segmentation_detailed_combines_multiple_masks(monkeypatch):
+    import app as m
+
+    if m.torch is None:
+        return
+
+    buf = BytesIO()
+    Image.new("RGB", (4, 4), color=(255, 255, 255)).save(buf, format="PNG")
+
+    detections = MagicMock()
+    detections.xyxy = np.array([[0, 0, 2, 2], [2, 2, 4, 4]], dtype=np.float32)
+    detections.confidence = np.array([0.9, 0.8], dtype=np.float32)
+
+    grounding_dino = MagicMock()
+    grounding_dino.predict_with_caption.return_value = (detections, ["rice", "plantain"])
+
+    mask_one = m.torch.zeros((4, 4), dtype=m.torch.bool)
+    mask_two = m.torch.zeros((4, 4), dtype=m.torch.bool)
+    mask_one[0, 0] = True
+    mask_two[3, 3] = True
+    masks = m.torch.stack([mask_one, mask_two]).unsqueeze(1)
+
+    sam_predictor = MagicMock()
+    sam_predictor.transform.apply_boxes_torch.side_effect = lambda boxes, _shape: boxes
+    sam_predictor.predict_torch.return_value = (masks, None, None)
+
+    monkeypatch.setattr(m, "grounding_dino", grounding_dino)
+    monkeypatch.setattr(m, "sam_predictor", sam_predictor)
+    monkeypatch.setattr(m, "device", "cpu")
+
+    result = m.run_segmentation_detailed(buf.getvalue(), "rice, plantain")
+    assert result.success is True
+    assert result.metadata["detections"]["count"] == 2
+    assert result.metadata["detections"]["phrases"] == ["rice", "plantain"]
+    sam_predictor.predict_torch.assert_called_once()

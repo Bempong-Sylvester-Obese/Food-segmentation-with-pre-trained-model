@@ -29,10 +29,6 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Webapp runtime outputs (uploads / generated images)
-webapp/static/images/
-webapp/static/GeneratedImages/
-
 # Model checkpoints
 *.pth
 *.pt
